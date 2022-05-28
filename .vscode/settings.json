@@ -1,0 +1,16 @@
+{
+    "files.associations": {
+        "stdio.h": "c",
+        "esp_event.h": "c",
+        "esp_log.h": "c",
+        "i2c.h": "c",
+        "queue.h": "c",
+        "gyro.h": "c"
+    },
+    "idf.flashType": "UART",
+    "idf.adapterTargetName": "esp32c3",
+    "idf.openOcdConfigs": [
+        "board/esp32c3-builtin.cfg"
+    ],
+    "idf.portWin": "COM3"
+}
