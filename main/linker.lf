@@ -1,0 +1,9 @@
+[mapping:ext_driver]
+archive: libdriver.a
+entries:
+    gpio (noflash)
+
+[mapping:ext_soc]
+archive: libhal.a
+entries:
+    gpio_hal (noflash)

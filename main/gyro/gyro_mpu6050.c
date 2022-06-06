@@ -6,6 +6,9 @@
 
 #include <esp_log.h>
 #include <esp_check.h>
+#include <esp_attr.h>
+
+#include <driver/gptimer.h>
 
 #include "bus/bus_i2c.h"
 
@@ -36,6 +39,7 @@ static const char *TAG = "gyro_mpu";
 
 #define REG_INT_STATUS 0x3a
 #define REG_INT_STATUS_MASK_FIFO_OFLOW (1 << 4)
+#define REG_INT_STATUS_MASK_DATA_RDY (1 << 0)
 
 #define REG_USER_CONTROL 0x6a
 #define REG_USER_CONTROL_MASK_FIFO_EN (1 << 6)
@@ -56,26 +60,50 @@ static const char *TAG = "gyro_mpu";
 
 #define FIFO_SAMPLE_SIZE 12
 
-static bool gyro_enqueue_sample(gyro_task_params *params, uint8_t *sample, uint64_t timestamp)
+static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data)
 {
-    gyro_sample_message msg = {
-        .timestamp = timestamp,
-        .accel_x = (sample[0] << 8) | sample[1],
-        .accel_y = (sample[2] << 8) | sample[3],
-        .accel_z = (sample[4] << 8) | sample[5],
-        .gyro_x = (sample[6] << 8) | sample[7],
-        .gyro_y = (sample[8] << 8) | sample[9],
-        .gyro_z = (sample[10] << 8) | sample[11]
-    };
+    gyro_task_params *params = (gyro_task_params *)user_data;
+    static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
+    static uint64_t samples_total = 0;
 
-    return xQueueSendToBack(params->sample_queue, &msg, 0) != errQUEUE_FULL;
+    BaseType_t high_task_awoken = pdFALSE;
+
+    // i2c_register_read(DEV_ADDR, REG_INT_STATUS, tmp_data, 1);
+    // if (tmp_data[0] & REG_INT_STATUS_MASK_FIFO_OFLOW)
+    // {
+    //     ESP_LOGI(TAG, "FIFO overflow!");
+    //     while (true)
+    //         ;
+    // }
+
+    i2c_register_read(DEV_ADDR, REG_FIFO_COUNT_H, tmp_data, 2);
+    const int fifo_bytes = tmp_data[1] | (tmp_data[0] << 8);
+
+    // if (tmp_data[0] & REG_INT_STATUS_MASK_DATA_RDY)
+    if (fifo_bytes > 0)
+    {
+        i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
+        gyro_sample_message msg = {
+            .timestamp = samples_total * 1000,
+            .accel_x = (tmp_data[0] << 8) | tmp_data[1],
+            .accel_y = (tmp_data[2] << 8) | tmp_data[3],
+            .accel_z = (tmp_data[4] << 8) | tmp_data[5],
+            .gyro_x = (tmp_data[6] << 8) | tmp_data[7],
+            .gyro_y = (tmp_data[8] << 8) | tmp_data[9],
+            .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
+            .fifo_backlog = fifo_bytes};
+        ++samples_total;
+        xQueueSendToBackFromISR(params->sample_queue, &msg, &high_task_awoken);
+    }
+
+    return high_task_awoken;
 }
 
 void gyro_mpu6050_task(void *params_pvoid)
 {
     gyro_task_params *params = (gyro_task_params *)params_pvoid;
 
-    uint8_t data[FIFO_SAMPLE_SIZE];
+    uint8_t data[2];
     ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_WHO_AM_I, data, 1));
     ESP_LOGI(TAG, "WHO_AM_I = 0x%X", data[0]);
     if (data[0] != 0x68)
@@ -102,28 +130,28 @@ void gyro_mpu6050_task(void *params_pvoid)
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_FIFO_EN, REG_FIFO_EN_MASK_ACCEL | REG_FIFO_EN_MASK_GYRO));
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_USER_CONTROL, REG_USER_CONTROL_MASK_FIFO_EN));
 
-    uint64_t samples_total = 0;
-    for (;;)
-    {
-        ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_INT_STATUS, data, 1));
-        if (data[0] & REG_INT_STATUS_MASK_FIFO_OFLOW)
-        {
-            ESP_LOGI(TAG, "FIFO overflow!");
-            while (true)
-                ;
-        }
+    gptimer_handle_t gptimer = NULL;
+    gptimer_config_t timer_config = {
+        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
+        .direction = GPTIMER_COUNT_UP,
+        .resolution_hz = 1000000,
+    };
+    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer));
 
-        ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_FIFO_COUNT_H, data, 2));
-        const int fifo_bytes = data[1] | (data[0] << 8);
-        for (int fifo_bytes_left = fifo_bytes; fifo_bytes_left > 0; fifo_bytes_left -= FIFO_SAMPLE_SIZE)
-        {
-            ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_FIFO_RW, data, FIFO_SAMPLE_SIZE));
-            gyro_enqueue_sample(params, data, samples_total * 1000ULL);
-            ++samples_total;
-        }
+    gptimer_event_callbacks_t cbs = {
+        .on_alarm = gyro_timer_cb,
+    };
+    ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, params_pvoid));
 
-        // ESP_LOGI(TAG, "Read %d samples", fifo_bytes / FIFO_SAMPLE_SIZE);
+    ESP_ERROR_CHECK(gptimer_enable(gptimer));
 
-        vTaskDelay(1);
-    }
+    gptimer_alarm_config_t alarm_config1 = {
+        .alarm_count = 900,
+        .reload_count = 0,
+        .flags.auto_reload_on_alarm = 1};
+
+    ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer, &alarm_config1));
+    ESP_ERROR_CHECK(gptimer_start(gptimer));
+
+    vTaskDelete(NULL);
 }
