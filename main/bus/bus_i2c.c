@@ -14,7 +14,7 @@
 #define SCL(x) gpio_set_level(I2C_MASTER_SCL_IO, (x));
 
 #define HCLK()                   \
-    for (int i = 0; i < 10; i++) \
+    for (int i = 0; i < 8; i++) \
     {                            \
         __asm__("nop");          \
     };

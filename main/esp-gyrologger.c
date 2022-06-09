@@ -7,11 +7,14 @@
 
 #include <esp_log.h>
 #include <esp_console.h>
+#include <nvs_flash.h>
 
 #include "bus/bus_i2c.h"
 #include "gyro/gyro.h"
 #include "storage/storage_fat.h"
 #include "logger/logger.h"
+#include "wifi/wifi.h"
+#include "wifi/http.h"
 
 #include <string.h>
 
@@ -19,6 +22,13 @@ static const char *TAG = "main";
 
 void app_main(void)
 {
+    esp_err_t ret = nvs_flash_init();
+    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
+      ESP_ERROR_CHECK(nvs_flash_erase());
+      ret = nvs_flash_init();
+    }
+    ESP_ERROR_CHECK(ret);
+
     ESP_ERROR_CHECK(storage_fat_init());
 
     ESP_ERROR_CHECK(i2c_master_init());
@@ -46,6 +56,10 @@ void app_main(void)
     ESP_ERROR_CHECK(esp_console_new_repl_usb_serial_jtag(&usbjtag_config, &repl_config, &repl));
 #endif
     register_logger_cmd();
-    
+
+    wifi_init_softap();
+
+    http_init();
+
     ESP_ERROR_CHECK(esp_console_start_repl(repl));
 }

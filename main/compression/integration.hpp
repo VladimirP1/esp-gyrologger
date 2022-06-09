@@ -6,8 +6,6 @@ extern "C"
 }
 #include "quat.hpp"
 
-static constexpr double kGyroScale = 2000.0 / 32767.0 * M_PI / 180.0;
-
 struct BasicIntegrator
 {
     explicit BasicIntegrator() {}
@@ -16,7 +14,7 @@ struct BasicIntegrator
     {
         if (first_run)
             prev_ts = sample.timestamp;
-        quat::vec gyro{sample.gyro_x * kGyroScale, sample.gyro_y * kGyroScale, sample.gyro_z * kGyroScale};
+        quat::vec gyro{sample.gyro_x * kMessageGyroScale, sample.gyro_y * kMessageGyroScale, sample.gyro_z * kMessageGyroScale};
         current_quat = quat::normalize(
             quat::prod(quat::from_aa(quat::map(gyro, [&](double x)
                                                { return x * (sample.timestamp - prev_ts) / 1e6; })),

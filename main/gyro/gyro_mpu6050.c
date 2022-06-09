@@ -18,6 +18,11 @@ static const char *TAG = "gyro_mpu";
 
 #define REG_SMPRT_DIV 0x19
 
+#define REG_CONFIG 0x1a
+#define REG_CONFIG_BIT_DLPF_CFG_0 0
+#define REG_CONFIG_VALUE_DLPF_188HZ 1
+
+
 #define REG_GYRO_CONFIG 0x1b
 #define REG_GYRO_CONFIG_BIT_FS_SEL_0 3
 #define REG_GYRO_CONFIG_VALUE_FS_250_DPS 0
@@ -84,7 +89,7 @@ static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_
     {
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
         gyro_sample_message msg = {
-            .timestamp = samples_total * 1000,
+            .timestamp = samples_total * 5000,
             .accel_x = (tmp_data[0] << 8) | tmp_data[1],
             .accel_y = (tmp_data[2] << 8) | tmp_data[3],
             .accel_z = (tmp_data[4] << 8) | tmp_data[5],
@@ -93,7 +98,9 @@ static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_
             .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
             .fifo_backlog = fifo_bytes};
         ++samples_total;
-        xQueueSendToBackFromISR(params->sample_queue, &msg, &high_task_awoken);
+        if (xQueueSendToBackFromISR(params->sample_queue, &msg, &high_task_awoken) == errQUEUE_FULL) {
+            while(1);
+        }
     }
 
     return high_task_awoken;
@@ -123,7 +130,8 @@ void gyro_mpu6050_task(void *params_pvoid)
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_PWR_MGMT_1, REG_PWR_MGMT_1_VALUE_CLKSEL_ZGYRO << REG_PWR_MGMT_1_BIT_CLKSEL_0));
     ESP_LOGI(TAG, "IMU change clock");
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_SMPRT_DIV, 7));
+    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_CONFIG, REG_CONFIG_VALUE_DLPF_188HZ << REG_CONFIG_BIT_DLPF_CFG_0));
+    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_SMPRT_DIV, 1));
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_GYRO_CONFIG, REG_GYRO_CONFIG_VALUE_FS_2000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_ACCEL_CONFIG, REG_ACCEL_CONFIG_VALUE_FS_16_G << REG_ACCEL_CONFIG_BIT_FS_SEL_0));
 
