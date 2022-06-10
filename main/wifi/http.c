@@ -4,6 +4,8 @@
 #include <esp_event.h>
 #include <esp_log.h>
 
+#include <stdio.h>
+
 static const char *TAG = "example";
 
 /* An HTTP GET handler */
@@ -81,8 +83,21 @@ static esp_err_t hello_get_handler(httpd_req_t *req)
 
     /* Send response with custom headers and body set as the
      * string passed in user context*/
-    const char *resp_str = (const char *)req->user_ctx;
-    httpd_resp_send(req, resp_str, HTTPD_RESP_USE_STRLEN);
+    FILE* f = fopen("/spiflash/gyro.bin", "rb");
+    char* buf3 = (char*)malloc(1024);
+
+    for (int i = 0; i < 1000; ++i)
+    {
+        int read = fread(buf3, 1, 1024, f);
+        if (!read) {
+            httpd_resp_send_chunk(req, NULL, 0);
+            break;
+        }
+        httpd_resp_send_chunk(req, buf3, read);
+    }
+    
+    free(buf3);
+    fclose(f);
 
     /* After sending the HTTP response the old HTTP request
      * headers are lost. Check if HTTP request headers can be read now. */
@@ -99,7 +114,7 @@ static const httpd_uri_t hello = {
     .handler = hello_get_handler,
     /* Let's pass response string in user
      * context to demonstrate it's usage */
-    .user_ctx = "Hello World!"};
+    .user_ctx = "Hello World!\n"};
 
 static httpd_handle_t start_webserver(void)
 {

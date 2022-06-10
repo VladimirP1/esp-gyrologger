@@ -28,7 +28,7 @@ volatile bool calibrate = false;
 
 uint8_t buf[2000];
 constexpr size_t kBlockSize = 1024;
-constexpr int kScaleBits = 10;
+constexpr int kScaleBits = 15;
 constexpr double kQuantGyroScale = 3000;
 constexpr double kQuantErrorLimit = 0.04;
 
@@ -71,8 +71,8 @@ static void logger_task_cpp(void *params_pvoid)
             }
             if (i % 1000 == 0)
             {
-                auto r = quat::to_aa(q);
-                ESP_LOGI("gyro_consumer", "i=%d, ts = %lld, rZ = %f, max_backlog = %d", i, msg.timestamp, r[2], max_backlog);
+                // auto r = quat::to_aa(q);
+                ESP_LOGI("gyro_consumer", "i=%d, ts = %lld, qZ = %f, max_backlog = %d", i, msg.timestamp, q[3], max_backlog);
             }
             quat_encoder.encode(q);
         }

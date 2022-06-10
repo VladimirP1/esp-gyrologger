@@ -187,10 +187,10 @@ private:
     double count_{};
 };
 
-class LaplaceModel
+class DynamicLaplaceModel
 {
 public:
-    explicit LaplaceModel(int i_var, int scale) : i_var_(i_var), scale_(scale) {}
+    explicit DynamicLaplaceModel(int i_var, int scale) : i_var_(i_var), scale_(scale) {}
 
     double b() const { return sqrt(var() / 2); }
 
@@ -246,6 +246,55 @@ private:
     int i_var_, scale_;
 };
 
+#include "laplace_table.h"
+
+class LaplaceModel
+{
+public:
+    explicit LaplaceModel(int i_var, int scale) : i_var_(i_var), scale_(scale) {}
+
+    double b() const { return sqrt(var() / 2); }
+
+    double var() const { return *(kVarianceTable.begin() + i_var_); }
+
+    int cdf(int x) const
+    {
+        if (x <= -128)
+            return 0;
+        if (x > 128)
+            return 1 << scale_;
+
+        return cdf_ptrs[i_var_][x + 128];
+    }
+
+    int icdf(int y) const
+    {
+        int l{-129}, r{129};
+        while (l + 1 != r)
+        {
+            int mid = (l + r) / 2;
+            int mid_cdf = cdf(mid);
+            if (mid_cdf <= y && cdf(mid + 1) > y)
+            {
+                return mid;
+            }
+            if (mid_cdf <= y)
+            {
+                l = mid;
+            }
+            else
+            {
+                r = mid;
+            }
+        }
+        return r;
+    }
+
+    int freq(int x) const { return cdf(x + 1) - cdf(x); }
+
+private:
+    int i_var_, scale_;
+};
 class EntropyCoder
 {
 public:
@@ -261,9 +310,8 @@ public:
         {
             it = kVarianceTable.begin() + kVarianceTable.size() - 1;
         }
+        
         int i_var = std::distance(kVarianceTable.begin(), it);
-        printf("i_var = %d\n", i_var);
-
         LaplaceModel mdl(i_var, freq_scale_bits_);
 
         RansState state;

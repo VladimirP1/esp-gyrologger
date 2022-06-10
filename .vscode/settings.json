@@ -101,7 +101,8 @@
         "*.tcc": "cpp",
         "memory_resource": "cpp",
         "cinttypes": "cpp",
-        "nvs_flash.h": "c"
+        "nvs_flash.h": "c",
+        "esp_http_server.h": "c"
     },
     "idf.flashType": "UART",
     "idf.adapterTargetName": "esp32c3",
