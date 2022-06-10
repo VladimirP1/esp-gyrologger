@@ -10,35 +10,226 @@ extern "C" {
 #include "global_context.h"
 }
 
+#include "compression/compression.hpp"
+
+#include <ff.h>
+
+#include <string>
+
 static const char* TAG = "http-server";
 
 #include "http_strings.hpp"
 
-static esp_err_t download_get_handler(httpd_req_t* req) {
-    FILE* f = fopen("/spiflash/gyro.bin", "rb");
-    char* buf3 = (char*)malloc(1024);
+static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
+    static uint8_t buf2[2000];
+    static char buf_text[4096];
 
-    for (int i = 0; i < 1000; ++i) {
-        int read = fread(buf3, 1, 1024, f);
-        if (!read) {
-            httpd_resp_send_chunk(req, NULL, 0);
-            break;
-        }
-        httpd_resp_send_chunk(req, buf3, read);
+    httpd_resp_send_chunk(req, R"--(GYROFLOW IMU LOG
+version,1.1
+id,esplog
+orientation,YxZ
+tscale,0.001
+gscale,0.00122173047
+t,gx,gy,gz
+)--",
+                          HTTPD_RESP_USE_STRLEN);
+
+    ESP_LOGI(TAG, "Reading file");
+    FILE* f = fopen(filename, "rb");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        return 1;
     }
 
-    free(buf3);
+    fseek(f, 0L, SEEK_END);
+    ESP_LOGI(TAG, "file size is %d bytes", ftell(f));
+    fseek(f, 0L, SEEK_SET);
+
+    EntropyDecoder decoder(kScaleBits, kBlockSize);
+    QuatDecoder quat_decoder;
+
+    int have_bytes = 0;
+    int time = 0;
+    quat::quat prev_quat{1, 0, 0, 0};
+    char* wptr = buf_text;
+    while (true) {
+        int read_bytes = fread(buf2 + have_bytes, 1, 2000 - have_bytes, f);
+        have_bytes += read_bytes;
+
+        if (have_bytes < 2000) break;
+
+        int bytes = 0;
+        int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
+            if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
+            quat_decoder.decode(&x, &x + 1, [&](const quat::quat& q) {
+                // quat::vec rv = quat::to_aa(quat::prod(quat::conj(prev_quat), q));
+                int rv[] = {0,0,0};
+                int size = snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d\n",
+                                    time++, (int)(rv[0] / kMessageGyroScale), (int)(rv[1] / kMessageGyroScale),
+                                    (int)(rv[2] / kMessageGyroScale));
+                wptr += size;
+                prev_quat = q;
+
+                if (wptr - buf_text < 100) {
+                    httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN);
+                    wptr = buf_text;
+                }
+            });
+            bytes++;
+        });
+        have_bytes -= decoded_bytes;
+        ESP_LOGI(TAG, "%d block uncompressed to %d bytes", decoded_bytes, bytes);
+
+        taskYIELD();
+        memmove(buf2, buf2 + decoded_bytes, have_bytes);
+    }
     fclose(f);
 
+    if (wptr != buf_text) {
+        httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN);
+    }
+
+    httpd_resp_send_chunk(req, NULL, 0);
+
+    // FILE* f = fopen(filename, "rb");
+    // char* buf3 = (char*)malloc(1024);
+
+    // for (int i = 0; i < 1000; ++i) {
+    //     int read = fread(buf3, 1, 1024, f);
+    //     if (!read) {
+    //         httpd_resp_send_chunk(req, NULL, 0);
+    //         break;
+    //     }
+    //     httpd_resp_send_chunk(req, buf3, read);
+    // }
+
+    // free(buf3);
+    // fclose(f);
+
     return ESP_OK;
+}
+
+static esp_err_t download_get_handler(httpd_req_t* req) {
+    char buf[128];
+    int buf_len = httpd_req_get_url_query_len(req) + 1;
+    if (buf_len > sizeof(buf)) {
+        return ESP_FAIL;
+    }
+    if (buf_len > 1 && httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
+        ESP_LOGI(TAG, "Found URL query => %s", buf);
+        char param[32];
+        if (httpd_query_key_value(buf, "name", param, sizeof(param)) == ESP_OK) {
+            ESP_LOGI(TAG, "want to download %s", param);
+            snprintf(buf, sizeof(buf), "/spiflash/%s", param);
+            httpd_resp_set_hdr(req, "content-disposition", "attachment;filename=gyro.txt");
+            return respond_with_file(req, buf);
+        }
+    }
+
+    return ESP_FAIL;
 }
 
 static const httpd_uri_t download_get = {
     .uri = "/download", .method = HTTP_GET, .handler = download_get_handler, NULL};
 
-static esp_err_t root_get_handler(httpd_req_t* req) {
-    httpd_resp_send(req, testhtml, HTTPD_RESP_USE_STRLEN);
+std::pair<int, int> get_free_space_kb() {
+    constexpr int kSectorBytes = 4096;
+    FATFS* fs;
+    DWORD fre_clust, fre_sect, tot_sect;
+    /* Get volume information and free clusters of drive 0 */
+    FRESULT res = f_getfree("0:", &fre_clust, &fs);
+    /* Get total sectors and free sectors */
+    tot_sect = (fs->n_fatent - 2) * fs->csize;
+    fre_sect = fre_clust * fs->csize;
+    return {kSectorBytes * fre_sect / 1024, kSectorBytes * tot_sect / 1024};
+}
 
+static esp_err_t root_get_handler(httpd_req_t* req) {
+    httpd_resp_send_chunk(req, html_prefix, HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, "<body><h1>EspLog (", HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(req, gctx.logger_control.busy ? "BUSY" : "IDLE", HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, R"--()</h1>
+    <h2>Control</h2>
+    <button style="color:green;" class="command_btn" name="command" form="form_simple" value="calibrate">0</button>
+    <button style="color:red;" class="command_btn" name="command" form="form_simple" value="record">&#x23fa;</button>
+    <button style="color:black;" class="command_btn" name="command" form="form_simple" value="stop">&#x23F9;</button>
+
+    <h2>Status</h2>
+    <table class="status_table">
+        <tr>
+            <td>Active</td>
+            <td class="status_value_table_cell">)--",
+                          HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.busy).c_str(),
+                          HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, R"--(</td>
+        </tr>
+        <tr>
+            <td>Free space (kBytes)</td>
+            <td class="status_value_table_cell">)--",
+                          HTTPD_RESP_USE_STRLEN);
+
+    auto free_space = get_free_space_kb();
+    httpd_resp_send_chunk(req, std::to_string(free_space.first).c_str(), HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, R"--(</td>
+        </tr>
+    </table>
+    <h2>Log download</h2>
+    <table class="download_table">)--",
+                          HTTPD_RESP_USE_STRLEN);
+    bool busy = true;
+    if (xSemaphoreTake(gctx.logger_control.mutex, 2)) {
+        busy = gctx.logger_control.busy;
+        xSemaphoreGive(gctx.logger_control.mutex);
+    }
+
+    if (!busy) {
+        for (int i = 0; i <= 100; ++i) {
+            static constexpr char templ[] = "/spiflash/log%03d.bin";
+            char buf[30], buf2[256];
+            snprintf(buf, sizeof(buf), templ, i);
+            FILE* f = fopen(buf, "rb");
+            if (f) {
+                fseek(f, 0, SEEK_END);
+                int size_kb = ftell(f) / 1024;
+                fclose(f);
+
+                snprintf(buf2, sizeof(buf2), R"--(<tr>
+            <td><a href="/download?name=log%03d.bin">log%03d.bin</a></td>
+            <td class="download_table_mid_cell">%dKB</td>)--",
+                         i, i, size_kb);
+
+                httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN);
+
+                snprintf(buf2, sizeof(buf2), R"--(<td>
+                <button style="color:black;" class="delete_btn" name="unlink" form="form_simple"
+                    value="log%03d.bin">&#x274c;</button>
+            </td>
+        </tr>)--",
+                         i);
+
+                httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN);
+            }
+        }
+    } else {
+        httpd_resp_send_chunk(req, R"--((<tr><td>Logger is BUSY!</td></tr>)--",
+                              HTTPD_RESP_USE_STRLEN);
+    }
+    httpd_resp_send_chunk(req, R"--(</table>
+
+
+    <form id="form_simple" method="post" action=""></form>
+</body>)--",
+                          HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN);
+    httpd_resp_send_chunk(req, NULL, 0);
     return ESP_OK;
 }
 
@@ -47,7 +238,7 @@ static const httpd_uri_t root_get = {
 
 static esp_err_t root_post_handler(httpd_req_t* req) {
     char content[100];
-    size_t recv_size = MIN(req->content_len, sizeof(content));
+    size_t recv_size = MIN(req->content_len, sizeof(content) - 1);
 
     int ret = httpd_req_recv(req, content, recv_size);
     if (ret <= 0) {
@@ -59,29 +250,49 @@ static esp_err_t root_post_handler(httpd_req_t* req) {
 
     if (strncmp(content, "command=record", 14) == 0) {
         ESP_LOGI(TAG, "Start logging!");
-        if (!xSemaphoreTake(ctx.logger_control.mutex, 10)) {
+        if (!xSemaphoreTake(gctx.logger_control.mutex, 10)) {
             return ESP_FAIL;
         }
 
-        ctx.logger_control.active = true;
+        gctx.logger_control.active = true;
 
-        xSemaphoreGive(ctx.logger_control.mutex);
+        xSemaphoreGive(gctx.logger_control.mutex);
+    }
+
+    if (strncmp(content, "command=calibrate", 17) == 0) {
+        ESP_LOGI(TAG, "Request calibration!");
+        if (!xSemaphoreTake(gctx.logger_control.mutex, 10)) {
+            return ESP_FAIL;
+        }
+
+        gctx.logger_control.calibration_pending = true;
+
+        xSemaphoreGive(gctx.logger_control.mutex);
     }
 
     if (strncmp(content, "command=stop", 12) == 0) {
         ESP_LOGI(TAG, "Stop logging!");
-        if (!xSemaphoreTake(ctx.logger_control.mutex, 10)) {
+        if (!xSemaphoreTake(gctx.logger_control.mutex, 10)) {
             return ESP_FAIL;
         }
 
-        ctx.logger_control.active = false;
+        gctx.logger_control.active = false;
 
-        xSemaphoreGive(ctx.logger_control.mutex);
+        xSemaphoreGive(gctx.logger_control.mutex);
+    }
+
+    if (strncmp(content, "unlink=", 7) == 0) {
+        content[recv_size] = 0;
+        std::string path = content + 7;
+        if (unlink(("/spiflash/" + path).c_str())) {
+            ESP_LOGE(TAG, "Could not remove '%s'", ("/spiflash/" + path).c_str());
+            perror("???");
+        }
     }
 
     httpd_resp_set_status(req, "302 Found");
     httpd_resp_set_hdr(req, "Location", "/");
-    
+
     return httpd_resp_send(req, "", HTTPD_RESP_USE_STRLEN);
 }
 

@@ -24,12 +24,22 @@ extern "C" {
 
 #define TAG "logger"
 
-uint8_t buf[2000];
-constexpr size_t kBlockSize = 1024;
-constexpr int kScaleBits = 15;
-constexpr double kQuantGyroScale = 3000;
-constexpr double kQuantErrorLimit = 0.04;
+static esp_err_t find_good_filename(char *buf) {
+    static constexpr char templ[] = "/spiflash/log%03d.bin";
+    for (int i = 100; i--;) {
+        snprintf(buf, 30, templ, i);
+        FILE *f = fopen(buf, "rb");
+        if (f) {
+            fclose(f);
+            snprintf(buf, 30, templ, i + 1);
+            return ESP_OK;
+        }
+    }
+    return ESP_FAIL;
+}
 
+static uint8_t buf[2000];
+static char file_name_buf[30];
 static void logger_task_cpp(void *params_pvoid) {
     FILE *f = NULL;
 
@@ -42,35 +52,44 @@ static void logger_task_cpp(void *params_pvoid) {
     bool file_cleared = false;
     for (int i = 0;; ++i) {
         gyro_sample_message msg;
-        xQueueReceive(ctx.gyro_raw_queue, &msg, portMAX_DELAY);
+        xQueueReceive(gctx.gyro_raw_queue, &msg, portMAX_DELAY);
 
         msg.gyro_x -= offset_gx;
         msg.gyro_y -= offset_gy;
         msg.gyro_z -= offset_gz;
 
         quat::quat q = integrator.update(msg);
-        if (xSemaphoreTake(ctx.logger_control.mutex, 0)) {
-            if (ctx.logger_control.active) {
-                ctx.logger_control.busy = true;
-                if (ctx.logger_control.calibration_pending) {
+        if (xSemaphoreTake(gctx.logger_control.mutex, 0)) {
+            if (gctx.logger_control.active) {
+                gctx.logger_control.busy = true;
+                if (gctx.logger_control.calibration_pending) {
                     offset_gx = msg.gyro_x;
                     offset_gy = msg.gyro_y;
                     offset_gz = msg.gyro_z;
-                    ctx.logger_control.calibration_pending = false;
+                    ESP_LOGI(TAG, "Gyro calibrated");
+                    gctx.logger_control.calibration_pending = false;
                 }
-                xSemaphoreGive(ctx.logger_control.mutex);
+                xSemaphoreGive(gctx.logger_control.mutex);
+
+                if (!gctx.logger_control.file_name) {
+                    find_good_filename(file_name_buf);
+                    xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY);
+                    gctx.logger_control.file_name = file_name_buf;
+                    xSemaphoreGive(gctx.logger_control.mutex);
+                    ESP_LOGI(TAG, "Using filename: %s", file_name_buf);
+                }
 
                 if (!f) {
                     ESP_LOGI(TAG, "Opening file");
-                    f = fopen("/spiflash/gyro.bin", file_cleared ? "ab" : "wb");
+                    f = fopen(gctx.logger_control.file_name, "ab");
                     file_cleared = true;
 
                     if (!f) {
-                        ESP_LOGE("logger", "Cannot open file");
+                        ESP_LOGE(TAG, "Cannot open file");
                     }
                 }
                 if (i % 1000 == 0) {
-                    ESP_LOGI("gyro_consumer", "i=%d, ts = %lld, qZ = %f", i, msg.timestamp, q[3]);
+                    ESP_LOGI(TAG, "i=%d, ts = %lld, qZ = %f", i, msg.timestamp, q[3]);
                 }
                 quat_encoder.encode(q);
 
@@ -96,19 +115,21 @@ static void logger_task_cpp(void *params_pvoid) {
                     double elapsed = (xTaskGetTickCount() - prev_dump) * 1.0 / configTICK_RATE_HZ;
                     prev_dump = cur_dump;
                     ESP_LOGI(
-                        "gyro_consumer",
+                        TAG,
                         "%d bytes, compression ratio = %.2f, logger capacity at this rate = %.2f h",
                         (int)out_buf_size, out_buf_size * 1.0 / kBlockSize,
                         3000000 / (out_buf_size / elapsed) / 60 / 60);
                 }
             } else {
-                xSemaphoreGive(ctx.logger_control.mutex);
+                if (f) {
+                    fflush(f);
+                    fclose(f);
+                    f = NULL;
+                }
+                gctx.logger_control.busy = false;
+                gctx.logger_control.file_name = NULL;
+                xSemaphoreGive(gctx.logger_control.mutex);
             }
-        } else if (f) {
-            fflush(f);
-            fclose(f);
-            f = NULL;
-            ctx.logger_control.busy = false;
         }
 
         if (f && (i % 2000 == 0)) {
@@ -124,9 +145,9 @@ uint8_t buf2[2000];
 static int do_logger_cmd(int argc, char **argv) {
     if (argc == 2) {
         bool log = atoi(argv[1]);
-        ctx.logger_control.active = log;
+        gctx.logger_control.active = log;
 
-        ESP_LOGI("logger", "loger_enable = %d", log);
+        ESP_LOGI(TAG, "loger_enable = %d", log);
         return 0;
     }
     if (argc == 3) {
@@ -139,7 +160,7 @@ static int do_logger_cmd(int argc, char **argv) {
                 return 1;
             }
             fseek(f, 0L, SEEK_END);
-            ESP_LOGI("logger", "file size is %d bytes", ftell(f));
+            ESP_LOGI(TAG, "file size is %d bytes", ftell(f));
             fseek(f, 0L, SEEK_SET);
 
             EntropyDecoder decoder(kScaleBits, kBlockSize);
@@ -154,14 +175,14 @@ static int do_logger_cmd(int argc, char **argv) {
 
                 int bytes = 0;
                 int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
-                    if (++m % 999 == 0) ESP_LOGI("logger", "decode: %d", x);
+                    if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
                     quat_decoder.decode(&x, &x + 1, [](const quat::quat &q) {
                         // printf("q {%.3f, %.3f, %.3f, %.3f}\n", q[0], q[1], q[2], q[3]);
                     });
                     bytes++;
                 });
                 have_bytes -= decoded_bytes;
-                ESP_LOGI("logger", "%d block uncompressed to %d bytes", decoded_bytes, bytes);
+                ESP_LOGI(TAG, "%d block uncompressed to %d bytes", decoded_bytes, bytes);
 
                 vTaskDelay(1);
                 memmove(buf2, buf2 + decoded_bytes, have_bytes);
@@ -171,7 +192,7 @@ static int do_logger_cmd(int argc, char **argv) {
             return 0;
         }
         if (strcmp(argv[1], "calibrate") == 0) {
-            ctx.logger_control.calibration_pending = true;
+            gctx.logger_control.calibration_pending = true;
             return 0;
         }
     }

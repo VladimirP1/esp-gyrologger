@@ -97,7 +97,7 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
                                    .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
                                    .fifo_backlog = fifo_bytes};
         ++samples_total;
-        if (xQueueSendToBackFromISR(ctx.gyro_raw_queue, &msg, &high_task_awoken) == errQUEUE_FULL) {
+        if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) == errQUEUE_FULL) {
             while (1)
                 ;
         }

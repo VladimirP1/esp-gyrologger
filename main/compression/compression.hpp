@@ -9,6 +9,11 @@
 #include <tuple>
 #include <optional>
 
+constexpr size_t kBlockSize = 1024;
+constexpr int kScaleBits = 15;
+constexpr double kQuantGyroScale = 3000;
+constexpr double kQuantErrorLimit = 0.04;
+
 static inline int8_t iq_i16_i8(double update, double scale) {
     return std::min(std::max(fabs(update) * scale * ((update < 0) ? -1.0 : 1.0), -127.), 127.);
 }

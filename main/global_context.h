@@ -25,4 +25,4 @@ typedef struct {
 
 } GlobalContext;
 
-extern GlobalContext ctx;
+extern GlobalContext gctx;
