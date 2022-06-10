@@ -10,7 +10,7 @@
 #define EXAMPLE_ESP_WIFI_SSID "z-log"
 #define EXAMPLE_ESP_WIFI_PASS "12345678"
 #define EXAMPLE_ESP_WIFI_CHANNEL 11
-#define EXAMPLE_MAX_STA_CONN 3
+#define EXAMPLE_MAX_STA_CONN 4
 
 static const char *TAG = "wifi softAP";
 
@@ -54,9 +54,6 @@ void wifi_init_softap()
             .password = EXAMPLE_ESP_WIFI_PASS,
             .max_connection = EXAMPLE_MAX_STA_CONN,
             .authmode = WIFI_AUTH_WPA_WPA2_PSK,
-            .pmf_cfg = {
-                .required = false,
-            },
         },
     };
     if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0)

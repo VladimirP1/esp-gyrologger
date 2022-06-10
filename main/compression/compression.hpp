@@ -95,10 +95,7 @@ class QuatEncoder {
 class QuatDecoder {
    public:
     explicit QuatDecoder(double gyro_scale = 3000)
-        : gyro_scale(static_cast<uint16_t>(gyro_scale / 10) * 10) {
-        uint16_t gyro_scale_int = gyro_scale / 10;
-        gyro_scale = gyro_scale_int * 10;
-    }
+        : gyro_scale(static_cast<uint16_t>(gyro_scale / 10) * 10) {}
 
     template <class I>
     bool decode(I data_begin, I data_end,

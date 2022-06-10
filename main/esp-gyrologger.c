@@ -25,19 +25,14 @@ static const char *TAG = "main";
 
 void app_main(void)
 {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-      ESP_ERROR_CHECK(nvs_flash_erase());
-      ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
-
+    
     ESP_ERROR_CHECK(storage_fat_init());
 
     ESP_ERROR_CHECK(i2c_master_init());
     ESP_LOGI(TAG, "I2C initialized successfully");
 
     ctx.gyro_raw_queue = xQueueCreate(GYRO_MAX_QUEUE_LENGTH, sizeof(gyro_sample_message));
+    ctx.logger_control.mutex = xSemaphoreCreateMutex();
 
     xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     vTaskDelay(100);

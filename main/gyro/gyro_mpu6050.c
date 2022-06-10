@@ -7,8 +7,7 @@
 #include <esp_log.h>
 #include <esp_check.h>
 #include <esp_attr.h>
-
-#include <driver/gptimer.h>
+#include <driver/timer.h>
 
 #include "bus/bus_i2c.h"
 
@@ -23,7 +22,6 @@ static const char *TAG = "gyro_mpu";
 #define REG_CONFIG 0x1a
 #define REG_CONFIG_BIT_DLPF_CFG_0 0
 #define REG_CONFIG_VALUE_DLPF_188HZ 1
-
 
 #define REG_GYRO_CONFIG 0x1b
 #define REG_GYRO_CONFIG_BIT_FS_SEL_0 3
@@ -67,8 +65,10 @@ static const char *TAG = "gyro_mpu";
 
 #define FIFO_SAMPLE_SIZE 12
 
-static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data)
-{
+#define TIMER_DIVIDER (16)  //  Hardware timer clock divider
+#define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
+
+static bool IRAM_ATTR gyro_timer_cb(void *args) {
     static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
     static uint64_t samples_total = 0;
 
@@ -86,34 +86,31 @@ static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_
     const int fifo_bytes = tmp_data[1] | (tmp_data[0] << 8);
 
     // if (tmp_data[0] & REG_INT_STATUS_MASK_DATA_RDY)
-    if (fifo_bytes > 0)
-    {
+    if (fifo_bytes > 0) {
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
-        gyro_sample_message msg = {
-            .timestamp = samples_total * 5000,
-            .accel_x = (tmp_data[0] << 8) | tmp_data[1],
-            .accel_y = (tmp_data[2] << 8) | tmp_data[3],
-            .accel_z = (tmp_data[4] << 8) | tmp_data[5],
-            .gyro_x = (tmp_data[6] << 8) | tmp_data[7],
-            .gyro_y = (tmp_data[8] << 8) | tmp_data[9],
-            .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
-            .fifo_backlog = fifo_bytes};
+        gyro_sample_message msg = {.timestamp = samples_total * 5000,
+                                   .accel_x = (tmp_data[0] << 8) | tmp_data[1],
+                                   .accel_y = (tmp_data[2] << 8) | tmp_data[3],
+                                   .accel_z = (tmp_data[4] << 8) | tmp_data[5],
+                                   .gyro_x = (tmp_data[6] << 8) | tmp_data[7],
+                                   .gyro_y = (tmp_data[8] << 8) | tmp_data[9],
+                                   .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
+                                   .fifo_backlog = fifo_bytes};
         ++samples_total;
         if (xQueueSendToBackFromISR(ctx.gyro_raw_queue, &msg, &high_task_awoken) == errQUEUE_FULL) {
-            while(1);
+            while (1)
+                ;
         }
     }
 
     return high_task_awoken;
 }
 
-void gyro_mpu6050_task(void *params_pvoid)
-{
+void gyro_mpu6050_task(void *params_pvoid) {
     uint8_t data[2];
     ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_WHO_AM_I, data, 1));
     ESP_LOGI(TAG, "WHO_AM_I = 0x%X", data[0]);
-    if (data[0] != 0x68)
-    {
+    if (data[0] != 0x68) {
         ESP_LOGI(TAG, "Wrong WHO_AM_I value!");
         return;
     }
@@ -126,39 +123,44 @@ void gyro_mpu6050_task(void *params_pvoid)
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_PWR_MGMT_1, 0));
     ESP_LOGI(TAG, "IMU wake up");
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_PWR_MGMT_1, REG_PWR_MGMT_1_VALUE_CLKSEL_ZGYRO << REG_PWR_MGMT_1_BIT_CLKSEL_0));
+    ESP_ERROR_CHECK(
+        i2c_register_write_byte(DEV_ADDR, REG_PWR_MGMT_1,
+                                REG_PWR_MGMT_1_VALUE_CLKSEL_ZGYRO << REG_PWR_MGMT_1_BIT_CLKSEL_0));
     ESP_LOGI(TAG, "IMU change clock");
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_CONFIG, REG_CONFIG_VALUE_DLPF_188HZ << REG_CONFIG_BIT_DLPF_CFG_0));
+    ESP_ERROR_CHECK(i2c_register_write_byte(
+        DEV_ADDR, REG_CONFIG, REG_CONFIG_VALUE_DLPF_188HZ << REG_CONFIG_BIT_DLPF_CFG_0));
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_SMPRT_DIV, 1));
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_GYRO_CONFIG, REG_GYRO_CONFIG_VALUE_FS_2000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_ACCEL_CONFIG, REG_ACCEL_CONFIG_VALUE_FS_16_G << REG_ACCEL_CONFIG_BIT_FS_SEL_0));
+    ESP_ERROR_CHECK(
+        i2c_register_write_byte(DEV_ADDR, REG_GYRO_CONFIG,
+                                REG_GYRO_CONFIG_VALUE_FS_2000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
+    ESP_ERROR_CHECK(
+        i2c_register_write_byte(DEV_ADDR, REG_ACCEL_CONFIG,
+                                REG_ACCEL_CONFIG_VALUE_FS_16_G << REG_ACCEL_CONFIG_BIT_FS_SEL_0));
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_FIFO_EN, REG_FIFO_EN_MASK_ACCEL | REG_FIFO_EN_MASK_GYRO));
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_USER_CONTROL, REG_USER_CONTROL_MASK_FIFO_EN));
+    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_FIFO_EN,
+                                            REG_FIFO_EN_MASK_ACCEL | REG_FIFO_EN_MASK_GYRO));
+    ESP_ERROR_CHECK(
+        i2c_register_write_byte(DEV_ADDR, REG_USER_CONTROL, REG_USER_CONTROL_MASK_FIFO_EN));
 
-    gptimer_handle_t gptimer = NULL;
-    gptimer_config_t timer_config = {
-        .clk_src = GPTIMER_CLK_SRC_DEFAULT,
-        .direction = GPTIMER_COUNT_UP,
-        .resolution_hz = 1000000,
+    timer_config_t config = {
+        .divider = TIMER_DIVIDER,
+        .counter_dir = TIMER_COUNT_UP,
+        .counter_en = TIMER_PAUSE,
+        .alarm_en = TIMER_ALARM_EN,
+        .auto_reload = true,
     };
-    ESP_ERROR_CHECK(gptimer_new_timer(&timer_config, &gptimer));
+    timer_init(TIMER_GROUP_0, TIMER_0, &config);
 
-    gptimer_event_callbacks_t cbs = {
-        .on_alarm = gyro_timer_cb,
-    };
-    ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, NULL));
+    timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
 
-    ESP_ERROR_CHECK(gptimer_enable(gptimer));
+    /* Configure the alarm value and the interrupt on alarm. */
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 1e-3 * TIMER_SCALE);
+    timer_enable_intr(TIMER_GROUP_0, TIMER_0);
 
-    gptimer_alarm_config_t alarm_config1 = {
-        .alarm_count = 900,
-        .reload_count = 0,
-        .flags.auto_reload_on_alarm = 1};
+    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb, NULL, 0);
 
-    ESP_ERROR_CHECK(gptimer_set_alarm_action(gptimer, &alarm_config1));
-    ESP_ERROR_CHECK(gptimer_start(gptimer));
+    timer_start(TIMER_GROUP_0, TIMER_0);
 
     vTaskDelete(NULL);
 }
