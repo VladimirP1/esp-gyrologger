@@ -12,6 +12,8 @@
 
 #include "bus/bus_i2c.h"
 
+#include "global_context.h"
+
 static const char *TAG = "gyro_mpu";
 
 #define DEV_ADDR 0x68
@@ -67,7 +69,6 @@ static const char *TAG = "gyro_mpu";
 
 static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_event_data_t *edata, void *user_data)
 {
-    gyro_task_params *params = (gyro_task_params *)user_data;
     static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
     static uint64_t samples_total = 0;
 
@@ -98,7 +99,7 @@ static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_
             .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
             .fifo_backlog = fifo_bytes};
         ++samples_total;
-        if (xQueueSendToBackFromISR(params->sample_queue, &msg, &high_task_awoken) == errQUEUE_FULL) {
+        if (xQueueSendToBackFromISR(ctx.gyro_raw_queue, &msg, &high_task_awoken) == errQUEUE_FULL) {
             while(1);
         }
     }
@@ -108,15 +109,13 @@ static bool IRAM_ATTR gyro_timer_cb(gptimer_handle_t timer, const gptimer_alarm_
 
 void gyro_mpu6050_task(void *params_pvoid)
 {
-    gyro_task_params *params = (gyro_task_params *)params_pvoid;
-
     uint8_t data[2];
     ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_WHO_AM_I, data, 1));
     ESP_LOGI(TAG, "WHO_AM_I = 0x%X", data[0]);
     if (data[0] != 0x68)
     {
         ESP_LOGI(TAG, "Wrong WHO_AM_I value!");
-        return ESP_FAIL;
+        return;
     }
 
     /* Reset */
@@ -149,7 +148,7 @@ void gyro_mpu6050_task(void *params_pvoid)
     gptimer_event_callbacks_t cbs = {
         .on_alarm = gyro_timer_cb,
     };
-    ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, params_pvoid));
+    ESP_ERROR_CHECK(gptimer_register_event_callbacks(gptimer, &cbs, NULL));
 
     ESP_ERROR_CHECK(gptimer_enable(gptimer));
 

@@ -1,14 +1,8 @@
 #pragma once
 
-#include <freertos/FreeRTOS.h>
-#include <freertos/queue.h>
+#include <stdint.h>
 
 #define GYRO_MAX_QUEUE_LENGTH 1024
-
-typedef struct
-{
-    QueueHandle_t sample_queue;
-} gyro_task_params;
 
 typedef struct
 {
