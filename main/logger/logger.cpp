@@ -77,6 +77,7 @@ static void logger_task_cpp(void *params_pvoid) {
                     gctx.logger_control.file_name = file_name_buf;
                     xSemaphoreGive(gctx.logger_control.mutex);
                     ESP_LOGI(TAG, "Using filename: %s", file_name_buf);
+                    integrator.reset();
                 }
 
                 if (!f) {
@@ -89,7 +90,7 @@ static void logger_task_cpp(void *params_pvoid) {
                     }
                 }
                 if (i % 1000 == 0) {
-                    ESP_LOGI(TAG, "i=%d, ts = %lld, qZ = %f", i, msg.timestamp, q[3]);
+                    ESP_LOGI(TAG, "i=%d, ts = %lld, qZ = %f, int = %d, converged = %d", i, msg.timestamp, q.z, (int)msg.smpl_interval_ns);
                 }
                 quat_encoder.encode(q);
 
@@ -176,9 +177,9 @@ static int do_logger_cmd(int argc, char **argv) {
                 int bytes = 0;
                 int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
                     if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
-                    quat_decoder.decode(&x, &x + 1, [](const quat::quat &q) {
+                    // quat_decoder.decode(&x, &x + 1, [](const quat::quat &q) {
                         // printf("q {%.3f, %.3f, %.3f, %.3f}\n", q[0], q[1], q[2], q[3]);
-                    });
+                    // });
                     bytes++;
                 });
                 have_bytes -= decoded_bytes;

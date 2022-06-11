@@ -5,9 +5,11 @@
 #include "ext/rans_byte.h"
 
 #include <cstddef>
+#include <cmath>
 #include <deque>
 #include <tuple>
 #include <optional>
+#include <algorithm>
 
 constexpr size_t kBlockSize = 1024;
 constexpr int kScaleBits = 15;
@@ -39,9 +41,9 @@ class QuatEncoder {
             quat::vec v_update_quant =
                 quat::map(v_update, [&](double x) { return iq_i16_i8(x, gyro_scale); });
 
-            emit_byte(v_update_quant[0]);
-            emit_byte(v_update_quant[1]);
-            emit_byte(v_update_quant[2]);
+            emit_byte(v_update_quant.x);
+            emit_byte(v_update_quant.y);
+            emit_byte(v_update_quant.z);
 
             // update decoder state
             quat::vec v_update_dequant =

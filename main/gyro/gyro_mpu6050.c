@@ -68,9 +68,14 @@ static const char *TAG = "gyro_mpu";
 #define TIMER_DIVIDER (16)  //  Hardware timer clock divider
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
+#define WARMUP_TIME_US 10000000ULL
+
 static bool IRAM_ATTR gyro_timer_cb(void *args) {
     static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
-    static uint64_t samples_total = 0;
+    static uint64_t timestamp = 0;
+    static uint16_t timestamp_frac = 0;
+    static uint64_t prev_interrupt = 0;
+    static uint64_t avg_sample_interval_ns = 2000000;
 
     BaseType_t high_task_awoken = pdFALSE;
 
@@ -87,17 +92,30 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
     // if (tmp_data[0] & REG_INT_STATUS_MASK_DATA_RDY)
     if (fifo_bytes > 0) {
+        uint64_t time = esp_timer_get_time();
+        uint64_t elapsed = prev_interrupt ? time - prev_interrupt : 0;
+        prev_interrupt = time;
+        avg_sample_interval_ns = (avg_sample_interval_ns * 9999 + (elapsed * 1000) * 1) / 10000;
+
+        timestamp += avg_sample_interval_ns / 1000;
+        timestamp_frac += avg_sample_interval_ns % 1000;
+        if (timestamp_frac >= 1000) {
+            timestamp_frac -= 1000;
+            timestamp += 1;
+        }
+
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
-        gyro_sample_message msg = {.timestamp = samples_total * 5000,
+        gyro_sample_message msg = {.timestamp = timestamp,
                                    .accel_x = (tmp_data[0] << 8) | tmp_data[1],
                                    .accel_y = (tmp_data[2] << 8) | tmp_data[3],
                                    .accel_z = (tmp_data[4] << 8) | tmp_data[5],
                                    .gyro_x = (tmp_data[6] << 8) | tmp_data[7],
                                    .gyro_y = (tmp_data[8] << 8) | tmp_data[9],
                                    .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
-                                   .fifo_backlog = fifo_bytes};
-        ++samples_total;
-        if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) == errQUEUE_FULL) {
+                                   .fifo_backlog = fifo_bytes,
+                                   .smpl_interval_ns = avg_sample_interval_ns};
+        if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
+            errQUEUE_FULL) {
             while (1)
                 ;
         }

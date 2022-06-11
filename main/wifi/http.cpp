@@ -24,12 +24,15 @@ static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     static uint8_t buf2[2000];
     static char buf_text[4096];
 
+    const double sample_rate = 500;
+    const double gscale = 1 / 0.00053263221;
+
     httpd_resp_send_chunk(req, R"--(GYROFLOW IMU LOG
 version,1.1
 id,esplog
 orientation,YxZ
-tscale,0.001
-gscale,0.00122173047
+tscale,0.002
+gscale,0.00053263221
 t,gx,gy,gz
 )--",
                           HTTPD_RESP_USE_STRLEN);
@@ -62,15 +65,15 @@ t,gx,gy,gz
         int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
             if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
             quat_decoder.decode(&x, &x + 1, [&](const quat::quat& q) {
-                // quat::vec rv = quat::to_aa(quat::prod(quat::conj(prev_quat), q));
-                int rv[] = {0,0,0};
-                int size = snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d\n",
-                                    time++, (int)(rv[0] / kMessageGyroScale), (int)(rv[1] / kMessageGyroScale),
-                                    (int)(rv[2] / kMessageGyroScale));
+                quat::vec rv = quat::to_aa(quat::prod(q, quat::conj(prev_quat)));
+                int size =
+                    snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d\n", time++,
+                             (int)(rv.x * sample_rate * gscale), (int)(rv.y * sample_rate * gscale),
+                             (int)(rv.z * sample_rate * gscale));
                 wptr += size;
                 prev_quat = q;
 
-                if (wptr - buf_text < 100) {
+                if (wptr - buf_text > 3200) {
                     httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN);
                     wptr = buf_text;
                 }
@@ -121,7 +124,7 @@ static esp_err_t download_get_handler(httpd_req_t* req) {
         if (httpd_query_key_value(buf, "name", param, sizeof(param)) == ESP_OK) {
             ESP_LOGI(TAG, "want to download %s", param);
             snprintf(buf, sizeof(buf), "/spiflash/%s", param);
-            httpd_resp_set_hdr(req, "content-disposition", "attachment;filename=gyro.txt");
+            httpd_resp_set_hdr(req, "content-disposition", "attachment;filename=gyro.gcsv");
             return respond_with_file(req, buf);
         }
     }
