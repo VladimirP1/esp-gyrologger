@@ -24,14 +24,14 @@ static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     static uint8_t buf2[2000];
     static char buf_text[4096];
 
-    const double sample_rate = 500;
+    const double sample_rate = 8000.0 / 14;
     const double gscale = 1 / 0.00053263221;
 
     httpd_resp_send_chunk(req, R"--(GYROFLOW IMU LOG
 version,1.1
 id,esplog
 orientation,YxZ
-tscale,0.002
+tscale,0.00175
 gscale,0.00053263221
 t,gx,gy,gz
 )--",
@@ -181,6 +181,27 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 
     httpd_resp_send_chunk(req, R"--(</td>
         </tr>
+    <tr>
+        <td>Last log length (samples)</td>
+        <td class="status_value_table_cell">)--",
+                          HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.total_samples_written).c_str(),
+                          HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, R"--(</td>
+        </tr>
+        <tr>
+            <td>Last log avg rate (Bytes/min)</td>
+            <td class="status_value_table_cell">)--",
+                          HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req,
+                          std::to_string(gctx.logger_control.avg_logging_rate_bytes_min).c_str(),
+                          HTTPD_RESP_USE_STRLEN);
+
+    httpd_resp_send_chunk(req, R"--(</td>
+        </tr>
     </table>
     <h2>Log download</h2>
     <table class="download_table">)--",
@@ -220,7 +241,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
             }
         }
     } else {
-        httpd_resp_send_chunk(req, R"--((<tr><td>Logger is BUSY!</td></tr>)--",
+        httpd_resp_send_chunk(req, R"--(<tr><td>Logger is BUSY!</td></tr>)--",
                               HTTPD_RESP_USE_STRLEN);
     }
     httpd_resp_send_chunk(req, R"--(</table>

@@ -15,6 +15,7 @@
 #include "logger/logger.h"
 #include "wifi/wifi.h"
 #include "wifi/http.h"
+#include "compression/interpolate.h"
 
 #include "global_context.h"
 
@@ -32,11 +33,14 @@ void app_main(void)
     ESP_LOGI(TAG, "I2C initialized successfully");
 
     gctx.gyro_raw_queue = xQueueCreate(GYRO_MAX_QUEUE_LENGTH, sizeof(gyro_sample_message));
+    gctx.gyro_interp_queue = xQueueCreate(128, sizeof(gyro_sample_message));
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
 
+    xTaskCreate(interpolator_task, "interpolator", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     vTaskDelay(100);
     xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
+    
 
     // Console init
 //     esp_console_repl_t *repl = NULL;

@@ -28,11 +28,11 @@ class QuatEncoder {
    public:
     using byte_range_t = std::tuple<std::deque<int8_t>::iterator, std::deque<int8_t>::iterator>;
 
-    explicit QuatEncoder(double error_limit = 0.04, double gyro_scale = 3000)
+    explicit QuatEncoder(double error_limit = kQuantErrorLimit, double gyro_scale = kQuantGyroScale)
         : error_limit(error_limit), gyro_scale(static_cast<uint16_t>(gyro_scale / 10) * 10) {}
 
-    bool encode(quat::quat q) {
-        int iters = 10;
+    int encode(quat::quat q) {
+        int iters = 20;
         while (iters--) {
             // encode
             quat::quat q_update = quat::prod(quat::conj(q_state), q);
@@ -54,13 +54,14 @@ class QuatEncoder {
             double error_deg =
                 quat::norm(quat::to_aa(quat::prod(quat::conj(q_state), q))) * 180. / M_PI;
 
+            // TODO: compress large errors more efficently
             if (error_deg > error_limit) {
                 emit_byte(-128);
                 continue;
             }
             break;
         }
-        return iters >= 0;
+        return 20 - iters;
     }
 
     byte_range_t get_all_bytes() { return {bytes.begin(), bytes.end()}; }
@@ -101,17 +102,31 @@ class QuatEncoder {
 
 class QuatDecoder {
    public:
-    explicit QuatDecoder(double gyro_scale = 3000)
+    explicit QuatDecoder(double gyro_scale = kQuantGyroScale)
         : gyro_scale(static_cast<uint16_t>(gyro_scale / 10) * 10) {}
 
     template <class I>
     bool decode(I data_begin, I data_end,
                 const std::function<void(const quat::quat &)> &quat_callback) {
-        for (auto it = data_begin; it != data_end;) {
+        for (auto it = data_begin; it != data_end; ++it) {
             // clang-format off
-            if (a == -128) {a = *it; ++it; if (it == data_end) break;}
-            if (b == -128) {b = *it; ++it; if (it == data_end) break;}
-            if (c == -128) {c = *it;}
+            if (state == 0) {
+                if (*it == -128) { need_emit = false; }
+                else { state = 1; a = *it; }
+                continue;
+            } else if (state == 1) {
+                state = 2;
+                b = *it;
+                continue;
+            } else if (state == 2) {
+                state = 0;
+                c = *it;
+            }
+
+            if (need_emit) { 
+                need_emit = false; 
+                quat_callback(q_state); 
+            }
             // clang-format on
             quat::vec v_update_quant = {a * 1.0, b * 1.0, c * 1.0};
 
@@ -120,23 +135,7 @@ class QuatDecoder {
             v_state += v_dequant;
 
             q_state = quat::normalize(quat::prod(q_state, quat::from_aa(v_state)));
-
-            if (it != data_end) {
-                ++it;
-            } else {
-                quat_callback(q_state);
-                a = b = c = -128;
-                break;
-            }
-
-            if (*it == -128) {
-                ++it;
-                a = b = c = -128;
-                continue;
-            } else {
-                quat_callback(q_state);
-            }
-            a = b = c = -128;
+            need_emit = true;
         }
 
         return true;
@@ -145,6 +144,8 @@ class QuatDecoder {
    private:
     double gyro_scale{};
 
+    int state{};
+    bool need_emit{};
     int8_t a{-128}, b{-128}, c{-128};
 
     quat::quat q_state{1, 0, 0, 0};

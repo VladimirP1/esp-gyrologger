@@ -8,10 +8,10 @@
 typedef struct
 {
     uint64_t timestamp;
-    int16_t gyro_x, gyro_y, gyro_z;
-    int16_t accel_x, accel_y, accel_z;
+    int gyro_x, gyro_y, gyro_z;
+    int accel_x, accel_y, accel_z;
     uint16_t fifo_backlog;
     uint32_t smpl_interval_ns;
 } gyro_sample_message;
 
-#define kMessageGyroScale (2000.0 / 32767.0 * 3.141592 / 180.0)
+#define kMessageGyroScale (1000.0 / 32767.0 * 3.141592 / 180.0)

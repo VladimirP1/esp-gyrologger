@@ -47,19 +47,18 @@ static void logger_task_cpp(void *params_pvoid) {
     QuatEncoder quat_encoder;
     EntropyCoder entropy_coder(kScaleBits);
 
-    uint16_t offset_gx{}, offset_gy{}, offset_gz{};
+    int offset_gx{}, offset_gy{}, offset_gz{};
     TickType_t prev_dump = xTaskGetTickCount();
-    bool file_cleared = false;
     for (int i = 0;; ++i) {
         gyro_sample_message msg;
-        xQueueReceive(gctx.gyro_raw_queue, &msg, portMAX_DELAY);
+        xQueueReceive(gctx.gyro_interp_queue, &msg, portMAX_DELAY);
 
         msg.gyro_x -= offset_gx;
         msg.gyro_y -= offset_gy;
         msg.gyro_z -= offset_gz;
 
         quat::quat q = integrator.update(msg);
-        if (xSemaphoreTake(gctx.logger_control.mutex, 0)) {
+        if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
             if (gctx.logger_control.active) {
                 gctx.logger_control.busy = true;
                 if (gctx.logger_control.calibration_pending) {
@@ -69,30 +68,37 @@ static void logger_task_cpp(void *params_pvoid) {
                     ESP_LOGI(TAG, "Gyro calibrated");
                     gctx.logger_control.calibration_pending = false;
                 }
+                gctx.logger_control.total_samples_written += 1;
                 xSemaphoreGive(gctx.logger_control.mutex);
 
                 if (!gctx.logger_control.file_name) {
                     find_good_filename(file_name_buf);
                     xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY);
                     gctx.logger_control.file_name = file_name_buf;
+                    gctx.logger_control.total_samples_written = 0;
+                    gctx.logger_control.log_start_ts_ms = xTaskGetTickCount() * portTICK_PERIOD_MS;
+                    gctx.logger_control.avg_logging_rate_bytes_min = 0;
                     xSemaphoreGive(gctx.logger_control.mutex);
                     ESP_LOGI(TAG, "Using filename: %s", file_name_buf);
                     integrator.reset();
+                    quat_encoder.reset();
                 }
 
                 if (!f) {
                     ESP_LOGI(TAG, "Opening file");
                     f = fopen(gctx.logger_control.file_name, "ab");
-                    file_cleared = true;
 
                     if (!f) {
                         ESP_LOGE(TAG, "Cannot open file");
                     }
                 }
                 if (i % 1000 == 0) {
-                    ESP_LOGI(TAG, "i=%d, ts = %lld, qZ = %f, int = %d, converged = %d", i, msg.timestamp, q.z, (int)msg.smpl_interval_ns);
+                    ESP_LOGI(TAG, "i=%d, ts = %lld, qZ = %f, int = %d", i, msg.timestamp, q.z,
+                             (int)msg.smpl_interval_ns);
                 }
-                quat_encoder.encode(q);
+                if (int tries = quat_encoder.encode(q); tries > 1) {
+                    ESP_LOGW(TAG, "quat_encoder produced bytes: %d", 3 * tries);
+                }
 
                 if (quat_encoder.has_block(kBlockSize)) {
                     auto block = quat_encoder.get_block(kBlockSize);
@@ -134,9 +140,18 @@ static void logger_task_cpp(void *params_pvoid) {
         }
 
         if (f && (i % 2000 == 0)) {
+            if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
+                gctx.logger_control.total_bytes_written = ftell(f);
+                int log_duration_ms =
+                    xTaskGetTickCount() * portTICK_PERIOD_MS - gctx.logger_control.log_start_ts_ms;
+                gctx.logger_control.avg_logging_rate_bytes_min =
+                    gctx.logger_control.total_bytes_written * 1000LL * 60LL / log_duration_ms;
+                xSemaphoreGive(gctx.logger_control.mutex);
+            }
             fflush(f);
             fclose(f);
             f = NULL;
+            taskYIELD();
         }
     }
 }
@@ -178,7 +193,7 @@ static int do_logger_cmd(int argc, char **argv) {
                 int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
                     if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
                     // quat_decoder.decode(&x, &x + 1, [](const quat::quat &q) {
-                        // printf("q {%.3f, %.3f, %.3f, %.3f}\n", q[0], q[1], q[2], q[3]);
+                    // printf("q {%.3f, %.3f, %.3f, %.3f}\n", q[0], q[1], q[2], q[3]);
                     // });
                     bytes++;
                 });

@@ -104,7 +104,8 @@
         "nvs_flash.h": "c",
         "esp_http_server.h": "c",
         "timer.h": "c",
-        "*.ipp": "cpp"
+        "*.ipp": "cpp",
+        "global_context.h": "c"
     },
     "idf.flashType": "UART",
     "idf.adapterTargetName": "esp32c3",

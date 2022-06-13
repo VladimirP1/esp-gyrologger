@@ -68,14 +68,13 @@ static const char *TAG = "gyro_mpu";
 #define TIMER_DIVIDER (16)  //  Hardware timer clock divider
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
-#define WARMUP_TIME_US 10000000ULL
-
 static bool IRAM_ATTR gyro_timer_cb(void *args) {
+    static uint64_t time = 0;
     static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
     static uint64_t timestamp = 0;
     static uint16_t timestamp_frac = 0;
     static uint64_t prev_interrupt = 0;
-    static uint64_t avg_sample_interval_ns = 2000000;
+    static uint64_t avg_sample_interval_ns = 1750000;
 
     BaseType_t high_task_awoken = pdFALSE;
 
@@ -92,7 +91,6 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
     // if (tmp_data[0] & REG_INT_STATUS_MASK_DATA_RDY)
     if (fifo_bytes > 0) {
-        uint64_t time = esp_timer_get_time();
         uint64_t elapsed = prev_interrupt ? time - prev_interrupt : 0;
         prev_interrupt = time;
         avg_sample_interval_ns = (avg_sample_interval_ns * 9999 + (elapsed * 1000) * 1) / 10000;
@@ -106,12 +104,12 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
         gyro_sample_message msg = {.timestamp = timestamp,
-                                   .accel_x = (tmp_data[0] << 8) | tmp_data[1],
-                                   .accel_y = (tmp_data[2] << 8) | tmp_data[3],
-                                   .accel_z = (tmp_data[4] << 8) | tmp_data[5],
-                                   .gyro_x = (tmp_data[6] << 8) | tmp_data[7],
-                                   .gyro_y = (tmp_data[8] << 8) | tmp_data[9],
-                                   .gyro_z = (tmp_data[10] << 8) | tmp_data[11],
+                                   .accel_x = (int16_t)((tmp_data[0] << 8) | tmp_data[1]),
+                                   .accel_y = (int16_t)((tmp_data[2] << 8) | tmp_data[3]),
+                                   .accel_z = (int16_t)((tmp_data[4] << 8) | tmp_data[5]),
+                                   .gyro_x = (int16_t)((tmp_data[6] << 8) | tmp_data[7]),
+                                   .gyro_y = (int16_t)((tmp_data[8] << 8) | tmp_data[9]),
+                                   .gyro_z = (int16_t)((tmp_data[10] << 8) | tmp_data[11]),
                                    .fifo_backlog = fifo_bytes,
                                    .smpl_interval_ns = avg_sample_interval_ns};
         if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
@@ -120,7 +118,7 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
                 ;
         }
     }
-
+    time += 1000;
     return high_task_awoken;
 }
 
@@ -146,12 +144,11 @@ void gyro_mpu6050_task(void *params_pvoid) {
                                 REG_PWR_MGMT_1_VALUE_CLKSEL_ZGYRO << REG_PWR_MGMT_1_BIT_CLKSEL_0));
     ESP_LOGI(TAG, "IMU change clock");
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(
-        DEV_ADDR, REG_CONFIG, REG_CONFIG_VALUE_DLPF_188HZ << REG_CONFIG_BIT_DLPF_CFG_0));
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_SMPRT_DIV, 1));
+    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
+    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_SMPRT_DIV, 13));
     ESP_ERROR_CHECK(
         i2c_register_write_byte(DEV_ADDR, REG_GYRO_CONFIG,
-                                REG_GYRO_CONFIG_VALUE_FS_2000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
+                                REG_GYRO_CONFIG_VALUE_FS_1000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
     ESP_ERROR_CHECK(
         i2c_register_write_byte(DEV_ADDR, REG_ACCEL_CONFIG,
                                 REG_ACCEL_CONFIG_VALUE_FS_16_G << REG_ACCEL_CONFIG_BIT_FS_SEL_0));
@@ -176,7 +173,7 @@ void gyro_mpu6050_task(void *params_pvoid) {
     timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 1e-3 * TIMER_SCALE);
     timer_enable_intr(TIMER_GROUP_0, TIMER_0);
 
-    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb, NULL, 0);
+    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb, NULL, ESP_INTR_FLAG_IRAM);
 
     timer_start(TIMER_GROUP_0, TIMER_0);
 
