@@ -105,7 +105,8 @@
         "esp_http_server.h": "c",
         "timer.h": "c",
         "*.ipp": "cpp",
-        "global_context.h": "c"
+        "global_context.h": "c",
+        "cassert": "cpp"
     },
     "idf.flashType": "UART",
     "idf.adapterTargetName": "esp32c3",

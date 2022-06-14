@@ -16,9 +16,8 @@ extern "C" {
 
 #include <fstream>
 
-#include "compression/compression.hpp"
+#include "compression/lib/compression.hpp"
 #include "compression/integration.hpp"
-#include "compression/quat.hpp"
 
 #include "global_context.h"
 
@@ -38,14 +37,12 @@ static esp_err_t find_good_filename(char *buf) {
     return ESP_FAIL;
 }
 
-static uint8_t buf[2000];
 static char file_name_buf[30];
 static void logger_task_cpp(void *params_pvoid) {
     FILE *f = NULL;
 
     BasicIntegrator integrator;
-    QuatEncoder quat_encoder;
-    EntropyCoder entropy_coder(kScaleBits);
+    Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0, kBlockSize * 2);
 
     int offset_gx{}, offset_gy{}, offset_gz{};
     TickType_t prev_dump = xTaskGetTickCount();
@@ -57,7 +54,16 @@ static void logger_task_cpp(void *params_pvoid) {
         msg.gyro_y -= offset_gy;
         msg.gyro_z -= offset_gz;
 
-        quat::quat q = integrator.update(msg);
+        integrator.update(msg);
+
+        if (integrator.quats.size() == kBlockSize + 1) {
+            integrator.trim(kBlockSize);
+        }
+
+        if (integrator.quats.size() < kBlockSize) {
+            continue;
+        }
+
         if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
             if (gctx.logger_control.active) {
                 gctx.logger_control.busy = true;
@@ -68,7 +74,7 @@ static void logger_task_cpp(void *params_pvoid) {
                     ESP_LOGI(TAG, "Gyro calibrated");
                     gctx.logger_control.calibration_pending = false;
                 }
-                gctx.logger_control.total_samples_written += 1;
+                gctx.logger_control.total_samples_written += kBlockSize;
                 xSemaphoreGive(gctx.logger_control.mutex);
 
                 if (!gctx.logger_control.file_name) {
@@ -80,8 +86,7 @@ static void logger_task_cpp(void *params_pvoid) {
                     gctx.logger_control.avg_logging_rate_bytes_min = 0;
                     xSemaphoreGive(gctx.logger_control.mutex);
                     ESP_LOGI(TAG, "Using filename: %s", file_name_buf);
-                    integrator.reset();
-                    quat_encoder.reset();
+                    encoder.reset();
                 }
 
                 if (!f) {
@@ -92,41 +97,36 @@ static void logger_task_cpp(void *params_pvoid) {
                         ESP_LOGE(TAG, "Cannot open file");
                     }
                 }
-                if (i % 1000 == 0) {
-                    ESP_LOGI(TAG, "i=%d, ts = %lld, qZ = %f, int = %d", i, msg.timestamp, q.z,
-                             (int)msg.smpl_interval_ns);
-                }
-                if (int tries = quat_encoder.encode(q); tries > 1) {
-                    ESP_LOGW(TAG, "quat_encoder produced bytes: %d", 3 * tries);
-                }
 
-                if (quat_encoder.has_block(kBlockSize)) {
-                    auto block = quat_encoder.get_block(kBlockSize);
-                    uint8_t *buf_ptr = buf + sizeof(buf);
-                    const uint8_t *buf_end_ptr = buf + sizeof(buf);
-                    int out_buf_size =
-                        entropy_coder.encode_block(std::get<0>(block), std::get<1>(block), buf_ptr);
-                    quat_encoder.drop_block(kBlockSize);
+                // ESP_LOGI(TAG, "i=%d, ts = %lld, int = %d", i, msg.timestamp,
+                //          (int)msg.smpl_interval_ns);
 
-                    while (buf_ptr != buf_end_ptr) {
-                        int written = fwrite(buf_ptr, 1,
-                                             std::min(static_cast<size_t>(16),
-                                                      static_cast<size_t>(buf_end_ptr - buf_ptr)),
-                                             f);
-                        buf_ptr += written;
-                        if (!written) {
-                            vTaskDelay(1);
-                        }
+                auto tmp = encoder.encode_block(integrator.quats.data());
+
+                auto &bytes_to_write = tmp.first;
+                auto &max_error_rad = tmp.second;
+
+                auto buf_ptr = bytes_to_write.begin();
+                const auto buf_end_ptr = bytes_to_write.end();
+                int out_buf_size = bytes_to_write.size();
+
+                while (buf_ptr != buf_end_ptr) {
+                    int written = fwrite(&(*buf_ptr), 1,
+                                         std::min(static_cast<size_t>(16),
+                                                  static_cast<size_t>(buf_end_ptr - buf_ptr)),
+                                         f);
+                    buf_ptr += written;
+                    if (!written) {
+                        vTaskDelay(1);
                     }
-                    auto cur_dump = xTaskGetTickCount();
-                    double elapsed = (xTaskGetTickCount() - prev_dump) * 1.0 / configTICK_RATE_HZ;
-                    prev_dump = cur_dump;
-                    ESP_LOGI(
-                        TAG,
-                        "%d bytes, compression ratio = %.2f, logger capacity at this rate = %.2f h",
-                        (int)out_buf_size, out_buf_size * 1.0 / kBlockSize,
-                        3000000 / (out_buf_size / elapsed) / 60 / 60);
                 }
+                auto cur_dump = xTaskGetTickCount();
+                double elapsed = (xTaskGetTickCount() - prev_dump) * 1.0 / configTICK_RATE_HZ;
+                prev_dump = cur_dump;
+                ESP_LOGI(TAG, "%d bytes, logger capacity at this rate = %.2f h, max_error = %.4f",
+                         (int)out_buf_size, 3000000 / (out_buf_size / elapsed) / 60 / 60,
+                         float(max_error_rad) * 180 / M_PI);
+
             } else {
                 if (f) {
                     fflush(f);
@@ -139,7 +139,8 @@ static void logger_task_cpp(void *params_pvoid) {
             }
         }
 
-        if (f && (i % 2000 == 0)) {
+        static int flush_gate = 0;
+        if (f && (++flush_gate) % 10 == 0) {
             if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
                 gctx.logger_control.total_bytes_written = ftell(f);
                 int log_duration_ms =
@@ -156,7 +157,6 @@ static void logger_task_cpp(void *params_pvoid) {
     }
 }
 
-uint8_t buf2[2000];
 
 static int do_logger_cmd(int argc, char **argv) {
     if (argc == 2) {
@@ -179,30 +179,30 @@ static int do_logger_cmd(int argc, char **argv) {
             ESP_LOGI(TAG, "file size is %d bytes", ftell(f));
             fseek(f, 0L, SEEK_SET);
 
-            EntropyDecoder decoder(kScaleBits, kBlockSize);
-            QuatDecoder quat_decoder;
+            // EntropyDecoder decoder(kScaleBits, kBlockSize);
+            // QuatDecoder quat_decoder;
 
-            int have_bytes = 0;
-            while (true) {
-                int read_bytes = fread(buf2 + have_bytes, 1, 2000 - have_bytes, f);
-                have_bytes += read_bytes;
+            // int have_bytes = 0;
+            // while (true) {
+            //     int read_bytes = fread(buf2 + have_bytes, 1, 2000 - have_bytes, f);
+            //     have_bytes += read_bytes;
 
-                if (have_bytes < 2000) break;
+            //     if (have_bytes < 2000) break;
 
-                int bytes = 0;
-                int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
-                    if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
-                    // quat_decoder.decode(&x, &x + 1, [](const quat::quat &q) {
-                    // printf("q {%.3f, %.3f, %.3f, %.3f}\n", q[0], q[1], q[2], q[3]);
-                    // });
-                    bytes++;
-                });
-                have_bytes -= decoded_bytes;
-                ESP_LOGI(TAG, "%d block uncompressed to %d bytes", decoded_bytes, bytes);
+            //     int bytes = 0;
+            //     int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
+            //         if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
+            //         // quat_decoder.decode(&x, &x + 1, [](const quat::quat &q) {
+            //         // printf("q {%.3f, %.3f, %.3f, %.3f}\n", q[0], q[1], q[2], q[3]);
+            //         // });
+            //         bytes++;
+            //     });
+            //     have_bytes -= decoded_bytes;
+            //     ESP_LOGI(TAG, "%d block uncompressed to %d bytes", decoded_bytes, bytes);
 
-                vTaskDelay(1);
-                memmove(buf2, buf2 + decoded_bytes, have_bytes);
-            }
+            //     vTaskDelay(1);
+            //     memmove(buf2, buf2 + decoded_bytes, have_bytes);
+            // }
 
             fclose(f);
             return 0;

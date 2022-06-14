@@ -112,6 +112,11 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
                                    .gyro_z = (int16_t)((tmp_data[10] << 8) | tmp_data[11]),
                                    .fifo_backlog = fifo_bytes,
                                    .smpl_interval_ns = avg_sample_interval_ns};
+        // if ((time % 1000000) < 500000) {
+        //     msg.gyro_y = (time % 100000) < 50000 ? -10000 : 10000;
+        //     msg.gyro_x = (time % 10000) < 5000 ? -100000 : 1000;
+        //     msg.gyro_z = 50000;
+        // }
         if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
             errQUEUE_FULL) {
             while (1)

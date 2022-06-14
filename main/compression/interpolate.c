@@ -15,13 +15,11 @@ void interpolator_task(void* params) {
     while (true) {
         xQueueReceive(gctx.gyro_raw_queue, &ring[write_idx], portMAX_DELAY);
 
-        xQueueSend(gctx.gyro_interp_queue, &ring[write_idx], portMAX_DELAY);
-        continue;
-        
         write_idx = !write_idx;
 
         if (ring[!write_idx].fifo_backlog > 1000) {
             ESP_LOGE(TAG, "fifo overrun %d", ring[!write_idx].fifo_backlog);
+            abort();
         }
 
         // advance current time if possible

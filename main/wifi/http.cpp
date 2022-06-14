@@ -10,7 +10,7 @@ extern "C" {
 #include "global_context.h"
 }
 
-#include "compression/compression.hpp"
+#include "compression/lib/compression.hpp"
 
 #include <ff.h>
 
@@ -48,12 +48,11 @@ t,gx,gy,gz
     ESP_LOGI(TAG, "file size is %d bytes", ftell(f));
     fseek(f, 0L, SEEK_SET);
 
-    EntropyDecoder decoder(kScaleBits, kBlockSize);
-    QuatDecoder quat_decoder;
+    Coder decoder(kBlockSize);
 
     int have_bytes = 0;
     int time = 0;
-    quat::quat prev_quat{1, 0, 0, 0};
+    quat::quat prev_quat{};
     char* wptr = buf_text;
     while (true) {
         int read_bytes = fread(buf2 + have_bytes, 1, 2000 - have_bytes, f);
@@ -61,27 +60,27 @@ t,gx,gy,gz
 
         if (have_bytes < 2000) break;
 
-        int bytes = 0;
-        int decoded_bytes = decoder.decode_block(buf2, [&, m = 0](int x) mutable {
-            if (++m % 999 == 0) ESP_LOGI(TAG, "decode: %d", x);
-            quat_decoder.decode(&x, &x + 1, [&](const quat::quat& q) {
-                quat::vec rv = quat::to_aa(quat::prod(q, quat::conj(prev_quat)));
-                int size =
-                    snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d\n", time++,
-                             (int)(rv.x * sample_rate * gscale), (int)(rv.y * sample_rate * gscale),
-                             (int)(rv.z * sample_rate * gscale));
+        auto [decoded_bytes, dquats, scale] = decoder.decode_block(buf2);
+        for (auto& q : dquats) {
+            quat::vec rv = (q * prev_quat.conj()).axis_angle();
+            prev_quat = q;
+            if (time != 0) {
+                double scale = sample_rate * gscale;
+                int size = snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d\n",
+                                    time, (int)(double(rv.x) * scale), (int)(double(rv.y) * scale),
+                                    (int)(double(rv.z) * scale));
                 wptr += size;
-                prev_quat = q;
+            }
+            time++;
 
-                if (wptr - buf_text > 3200) {
-                    httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN);
-                    wptr = buf_text;
-                }
-            });
-            bytes++;
-        });
+            if (wptr - buf_text > 3200) {
+                httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN);
+                wptr = buf_text;
+            }
+        }
+
         have_bytes -= decoded_bytes;
-        ESP_LOGI(TAG, "%d block uncompressed to %d bytes", decoded_bytes, bytes);
+        ESP_LOGI(TAG, "%d block uncompressed, scale = %d", decoded_bytes, scale);
 
         taskYIELD();
         memmove(buf2, buf2 + decoded_bytes, have_bytes);

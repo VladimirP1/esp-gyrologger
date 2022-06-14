@@ -1,11 +1,12 @@
+#pragma once
+
 #include "fixquat.hpp"
 #include "rans_byte.h"
 #include "laplace_model.inc"
 
 // #include <iostream>
 #include <vector>
-
-
+#include <tuple>
 
 class Coder {
    private:
@@ -20,12 +21,14 @@ class Coder {
     } state;
 
     struct {
-        int8_t scale{18};
+        int8_t scale{22};
     } qp;
 
     int block_size;
     quat::base_type target_quality_deg{-1};
     int target_block_size{};
+
+    std::vector<uint8_t> compressed_block;
 
    private:
     static inline single_update quant_update(quat::vec update, int8_t scale) {
@@ -98,7 +101,7 @@ class Coder {
 
     explicit Coder(int block_size) : block_size(block_size) {}
 
-    std::vector<uint8_t> encode_block(quat::quat* quats) {
+    std::pair<std::vector<uint8_t>&, quat::base_type> encode_block(quat::quat* quats) {
         struct UpdateEncoder {
             std::vector<int8_t> buf;
 
@@ -135,7 +138,7 @@ class Coder {
         auto old_state = state;
         size_t bytes_put{};
         quat::base_type max_angle_error_rad{};
-        std::vector<uint8_t> compressed_block(10 * 3 * block_size);
+        compressed_block.resize(2000);
         for (int tr = 0; tr < 3; ++tr) {
             state = old_state;
 
@@ -179,6 +182,7 @@ class Coder {
             uint8_t* compressed_ptr = compressed_block.data() + compressed_block.size();
             RansEncInit(&state);
 
+            bool failure = false;
             uint8_t checksum = 0;
             auto data_begin = upd_enc.buf.begin();
             auto data_end = upd_enc.buf.end();
@@ -188,7 +192,16 @@ class Coder {
                 int freq = mdl.cdf(*data_end + 1) - start;
                 RansEncPut(&state, &compressed_ptr, start, freq, 15);
                 checksum += static_cast<uint8_t>(*data_end);
+                if (compressed_ptr - compressed_block.data() < 16) {
+                    printf("scale = %d, i_var = %d\n", qp.scale, i_var);
+                    // abort();
+                    qp.scale = std::min(qp.scale + 2, 22);
+                    --tr;
+                    failure = true;
+                    break;
+                }
             }
+            if (failure) continue;
             RansEncFlush(&state, &compressed_ptr);
             *(--compressed_ptr) = i_var | (checksum << 5);
             *(--compressed_ptr) = qp.scale;
@@ -205,10 +218,10 @@ class Coder {
 
         compressed_block.erase(compressed_block.begin(), compressed_block.end() - bytes_put);
 
-        return compressed_block;
+        return {compressed_block, max_angle_error_rad};
     }
 
-    std::pair<size_t, std::vector<quat::quat>> decode_block(uint8_t* compressed_data) {
+    std::tuple<size_t, std::vector<quat::quat>, int> decode_block(uint8_t* compressed_data) {
         int scale = compressed_data[0];
         int i_var = compressed_data[1] & 0x1f;
         uint8_t checksum = compressed_data[1] >> 5;
@@ -247,6 +260,11 @@ class Coder {
             // printf("checksum mismatch %d, %d\n", checksum, own_checksum);
             abort();
         }
-        return {decode_ptr - compressed_data, quats};
+        return {decode_ptr - compressed_data, quats, scale};
+    }
+
+    void reset() {
+        state.q = {};
+        state.v = {};
     }
 };

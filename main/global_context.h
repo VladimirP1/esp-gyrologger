@@ -7,6 +7,8 @@
 #include <freertos/queue.h>
 #include <freertos/semphr.h>
 
+#define kBlockSize 256
+
 typedef struct {
     QueueHandle_t gyro_raw_queue;
     QueueHandle_t gyro_interp_queue;
