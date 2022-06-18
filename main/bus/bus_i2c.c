@@ -29,7 +29,7 @@ esp_err_t i2c_master_init()
 
     gpio_config_t io_conf = {
         .intr_type = GPIO_INTR_DISABLE,
-        .mode = GPIO_MODE_INPUT_OUTPUT_OD,
+        .mode = GPIO_MODE_INPUT_OUTPUT,
         .pin_bit_mask = (1 << I2C_MASTER_SCL_IO) | (1 << I2C_MASTER_SDA_IO),
         .pull_up_en = GPIO_PULLUP_ENABLE};
 

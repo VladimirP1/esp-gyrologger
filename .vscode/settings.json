@@ -106,12 +106,15 @@
         "timer.h": "c",
         "*.ipp": "cpp",
         "global_context.h": "c",
-        "cassert": "cpp"
+        "cassert": "cpp",
+        "freertos.h": "c",
+        "gyro_types.h": "c",
+        "gyro_mpu6050.h": "c"
     },
     "idf.flashType": "UART",
     "idf.adapterTargetName": "esp32c3",
     "idf.openOcdConfigs": [
         "board/esp32c3-builtin.cfg"
     ],
-    "idf.portWin": "COM3"
+    "idf.portWin": "COM5"
 }
