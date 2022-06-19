@@ -24,6 +24,8 @@ static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     static uint8_t buf2[2000];
     static char buf_text[4096];
 
+    gctx.pause_polling = true;
+
     const double sample_rate = 8000.0 / 14;
     const double gscale = 1 / 0.00053263221;
 
@@ -93,20 +95,7 @@ t,gx,gy,gz
 
     httpd_resp_send_chunk(req, NULL, 0);
 
-    // FILE* f = fopen(filename, "rb");
-    // char* buf3 = (char*)malloc(1024);
-
-    // for (int i = 0; i < 1000; ++i) {
-    //     int read = fread(buf3, 1, 1024, f);
-    //     if (!read) {
-    //         httpd_resp_send_chunk(req, NULL, 0);
-    //         break;
-    //     }
-    //     httpd_resp_send_chunk(req, buf3, read);
-    // }
-
-    // free(buf3);
-    // fclose(f);
+    gctx.continue_polling = true;
 
     return ESP_OK;
 }

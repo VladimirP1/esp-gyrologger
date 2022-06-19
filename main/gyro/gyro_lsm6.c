@@ -15,8 +15,6 @@
 
 static const char* TAG = "gyro_lsm6";
 
-#define DEV_ADDR 0x6a
-
 #define REG_FIFO_CTRL3 0x09
 #define REG_FIFO_CTRL3_BIT_BDR_GY_0 4
 #define REG_FIFO_CTRL3_BIT_BDR_XL_0 0
@@ -70,6 +68,8 @@ static const char* TAG = "gyro_lsm6";
 #define TIMER_DIVIDER (16)
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
+static const uint8_t dev_adr = 0x6a;
+
 static bool IRAM_ATTR gyro_timer_cb(void* args) {
     static uint8_t tmp_data[7];
     static uint64_t time = 0;
@@ -77,20 +77,22 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     static int16_t accel[3];
     static bool have_gyro = false;
 
-    static int gyro_counter = 0;
-    static uint64_t gyro_counter_reset_ts = 0;
-    static uint64_t avg_sample_interval_ns = 602410;
+    if (gctx.pause_polling) {
+        i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (0 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
+        gctx.pause_polling = false;
+        return false;
+    } else if (gctx.continue_polling) {
+        i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
+        gctx.continue_polling = false;
+        return false;
+    }
 
-    static uint64_t timestamp = 0;
-    static uint16_t timestamp_frac = 0;
-
-    vPortEnterCritical();
-    i2c_register_read(DEV_ADDR, REG_FIFO_STATUS1, tmp_data, 2);
+    i2c_register_read(dev_adr, REG_FIFO_STATUS1, tmp_data, 2);
     const int fifo_bytes = tmp_data[0] | ((tmp_data[1] & 0x03) << 8);
 
     if (fifo_bytes > 0) {
-        i2c_register_read(DEV_ADDR, REG_FIFO_DATA_OUT_TAG, tmp_data, 1);
-        i2c_register_read(DEV_ADDR, REG_FIFO_DATA_OUT_X_L, tmp_data + 1, 6);
+        i2c_register_read(dev_adr, REG_FIFO_DATA_OUT_TAG, tmp_data, 1);
+        i2c_register_read(dev_adr, REG_FIFO_DATA_OUT_X_L, tmp_data + 1, 6);
         uint8_t tag = (tmp_data[0] >> 3);
         if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_GYRO) {
             gyro[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]);
@@ -103,7 +105,6 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
             accel[2] = (int16_t)((tmp_data[4] << 8) | tmp_data[5]);
         }
     }
-    vPortExitCritical();
 
     if (fifo_bytes > 256) {
         while (1)
@@ -113,14 +114,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
         have_gyro = false;
-        timestamp += avg_sample_interval_ns / 1000;
-        timestamp_frac += avg_sample_interval_ns % 1000;
-        if (timestamp_frac >= 1000) {
-            timestamp_frac -= 1000;
-            timestamp += 1;
-        }
-        ++gyro_counter;
-        gyro_sample_message msg = {.timestamp = timestamp,
+        gyro_sample_message msg = {.timestamp = time,
                                    .accel_x = accel[0],
                                    .accel_y = accel[1],
                                    .accel_z = accel[2],
@@ -128,17 +122,12 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
                                    .gyro_y = gyro[1],
                                    .gyro_z = gyro[2],
                                    .fifo_backlog = fifo_bytes,
-                                   .smpl_interval_ns = avg_sample_interval_ns};
+                                   .smpl_interval_ns = 0};
         if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
             errQUEUE_FULL) {
             while (1)
                 ;
         }
-    }
-    if (gyro_counter > 5000) {
-        avg_sample_interval_ns = (time - gyro_counter_reset_ts) * 1000 / gyro_counter;
-        gyro_counter = 0;
-        gyro_counter_reset_ts = time;
     }
     time += 500;
     return high_task_awoken;
@@ -146,8 +135,6 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
 void gyro_lsm6_task(void* params) {
     gctx.gyro_raw_to_rads =  (35e-3 * 3.141592 / 180.0);
-
-    const uint8_t dev_adr = 0x6a;
 
     static uint8_t data[2];
     i2c_register_read(dev_adr, REG_WHO_AM_I, data, 1);

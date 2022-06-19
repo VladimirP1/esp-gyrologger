@@ -35,6 +35,7 @@ void app_main(void) {
 
     xTaskCreate(interpolator_task, "interpolator", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
+    // xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     xTaskCreate(gyro_lsm6_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     
 

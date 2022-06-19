@@ -71,10 +71,6 @@ static const char *TAG = "gyro_mpu";
 static bool IRAM_ATTR gyro_timer_cb(void *args) {
     static uint64_t time = 0;
     static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
-    static uint64_t timestamp = 0;
-    static uint16_t timestamp_frac = 0;
-    static uint64_t prev_interrupt = 0;
-    static uint64_t avg_sample_interval_ns = 1750000;
 
     BaseType_t high_task_awoken = pdFALSE;
 
@@ -91,19 +87,8 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
     // if (tmp_data[0] & REG_INT_STATUS_MASK_DATA_RDY)
     if (fifo_bytes > 0) {
-        uint64_t elapsed = prev_interrupt ? time - prev_interrupt : 0;
-        prev_interrupt = time;
-        avg_sample_interval_ns = (avg_sample_interval_ns * 9999 + (elapsed * 1000) * 1) / 10000;
-
-        timestamp += avg_sample_interval_ns / 1000;
-        timestamp_frac += avg_sample_interval_ns % 1000;
-        if (timestamp_frac >= 1000) {
-            timestamp_frac -= 1000;
-            timestamp += 1;
-        }
-
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
-        gyro_sample_message msg = {.timestamp = timestamp,
+        gyro_sample_message msg = {.timestamp = time,
                                    .accel_x = (int16_t)((tmp_data[0] << 8) | tmp_data[1]),
                                    .accel_y = (int16_t)((tmp_data[2] << 8) | tmp_data[3]),
                                    .accel_z = (int16_t)((tmp_data[4] << 8) | tmp_data[5]),
@@ -111,7 +96,7 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
                                    .gyro_y = (int16_t)((tmp_data[8] << 8) | tmp_data[9]),
                                    .gyro_z = (int16_t)((tmp_data[10] << 8) | tmp_data[11]),
                                    .fifo_backlog = fifo_bytes,
-                                   .smpl_interval_ns = avg_sample_interval_ns};
+                                   .smpl_interval_ns = 0};
         // if ((time % 1000000) < 500000) {
         //     msg.gyro_y = (time % 100000) < 50000 ? -10000 : 10000;
         //     msg.gyro_x = (time % 10000) < 5000 ? -100000 : 1000;
@@ -129,7 +114,7 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
 void gyro_mpu6050_task(void *params_pvoid) {
     gctx.gyro_raw_to_rads = (1000.0 / 32767.0 * 3.141592 / 180.0);
-    
+
     uint8_t data[2];
     ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_WHO_AM_I, data, 1));
     ESP_LOGI(TAG, "WHO_AM_I = 0x%X", data[0]);
@@ -152,7 +137,7 @@ void gyro_mpu6050_task(void *params_pvoid) {
     ESP_LOGI(TAG, "IMU change clock");
 
     ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
-    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_SMPRT_DIV, 13));
+    ESP_ERROR_CHECK(i2c_register_write_byte(DEV_ADDR, REG_SMPRT_DIV, 7));
     ESP_ERROR_CHECK(
         i2c_register_write_byte(DEV_ADDR, REG_GYRO_CONFIG,
                                 REG_GYRO_CONFIG_VALUE_FS_1000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
@@ -177,7 +162,7 @@ void gyro_mpu6050_task(void *params_pvoid) {
     timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
 
     /* Configure the alarm value and the interrupt on alarm. */
-    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 1e-3 * TIMER_SCALE);
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 9e-4 * TIMER_SCALE);
     timer_enable_intr(TIMER_GROUP_0, TIMER_0);
 
     timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb, NULL, ESP_INTR_FLAG_IRAM);

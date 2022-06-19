@@ -41,7 +41,7 @@ static char file_name_buf[30];
 static void logger_task_cpp(void *params_pvoid) {
     FILE *f = NULL;
 
-    BasicIntegrator integrator;
+    BasicIntegrator integrator(kBlockSize, 2);
     Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0, kBlockSize * 2);
 
     int offset_gx{}, offset_gy{}, offset_gz{};
@@ -54,13 +54,7 @@ static void logger_task_cpp(void *params_pvoid) {
         msg.gyro_y -= offset_gy;
         msg.gyro_z -= offset_gz;
 
-        integrator.update(msg);
-
-        if (integrator.quats.size() == kBlockSize + 1) {
-            integrator.trim(kBlockSize);
-        }
-
-        if (integrator.quats.size() < kBlockSize) {
+        if (!integrator.update(msg)) {
             continue;
         }
 
@@ -154,6 +148,8 @@ static void logger_task_cpp(void *params_pvoid) {
             f = NULL;
             taskYIELD();
         }
+
+        integrator.clear();
     }
 }
 

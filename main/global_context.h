@@ -13,6 +13,8 @@ typedef struct {
     QueueHandle_t gyro_raw_queue;
     QueueHandle_t gyro_interp_queue;
     double gyro_raw_to_rads;
+    volatile bool pause_polling;
+    volatile bool continue_polling;
     struct {
         SemaphoreHandle_t mutex;
 

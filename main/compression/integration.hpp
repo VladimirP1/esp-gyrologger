@@ -9,27 +9,37 @@ extern "C" {
 #include <vector>
 
 struct BasicIntegrator {
-    explicit BasicIntegrator() {}
+    explicit BasicIntegrator(int block_size, int decimate)
+        : block_size(block_size), decimate(decimate) {}
 
-    quat::quat update(const gyro_sample_message &sample) {
+    bool update(const gyro_sample_message& sample) {
         if (first_run) prev_ts = sample.timestamp;
         double scale = gctx.gyro_raw_to_rads * (sample.timestamp - prev_ts) / 1e6;
         quat::vec gyro{quat::base_type{sample.gyro_x * scale},
                        quat::base_type{sample.gyro_y * scale},
                        quat::base_type{sample.gyro_z * scale}};
-        quat::quat current_quat = quats.back();
         current_quat = (quat::quat(gyro) * current_quat).normalized();
         prev_ts = sample.timestamp;
         first_run = false;
-        quats.push_back(current_quat);
-        return current_quat;
+        if (sample_counter++ % decimate == 0) {
+            quats.push_back(current_quat);
+        }
+        return quats.size() == block_size;
     }
 
-    void trim(int block_size) { quats.erase(quats.begin(), quats.begin() + block_size); }
+    void clear() { quats.clear(); }
 
-    std::vector<quat::quat> quats{1};
+    quat::quat* data() { return quats.data(); }
+
+    std::vector<quat::quat> quats;
 
    private:
+    quat::quat current_quat;
+
     unsigned long long prev_ts{};
     bool first_run{true};
+    int sample_counter{};
+
+    int block_size;
+    int decimate;
 };
