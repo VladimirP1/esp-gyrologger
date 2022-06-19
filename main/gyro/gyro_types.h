@@ -13,5 +13,3 @@ typedef struct
     uint16_t fifo_backlog;
     uint32_t smpl_interval_ns;
 } gyro_sample_message;
-
-#define kMessageGyroScale (1000.0 / 32767.0 * 3.141592 / 180.0)

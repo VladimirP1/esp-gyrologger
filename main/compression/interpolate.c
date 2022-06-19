@@ -6,6 +6,29 @@
 
 #define TAG "interpolator"
 
+static uint64_t smooth_timestamp(uint64_t rough_timestamp) {
+    static int gyro_counter = 0;
+    static uint64_t gyro_counter_reset_ts = 0;
+    static uint64_t avg_sample_interval_ns = 602410;
+
+    static uint64_t timestamp = 0;
+    static uint16_t timestamp_frac = 0;
+
+    timestamp += avg_sample_interval_ns / 1000;
+    timestamp_frac += avg_sample_interval_ns % 1000;
+    if (timestamp_frac >= 1000) {
+        timestamp_frac -= 1000;
+        timestamp += 1;
+    }
+    ++gyro_counter;
+
+    if (gyro_counter > 5000) {
+        avg_sample_interval_ns = (rough_timestamp - gyro_counter_reset_ts) * 1000 / gyro_counter;
+        gyro_counter = 0;
+        gyro_counter_reset_ts = rough_timestamp;
+    }
+}
+
 void interpolator_task(void* params) {
     const int sample_interval = 1750;
     uint64_t current_time = 0;
@@ -29,6 +52,9 @@ void interpolator_task(void* params) {
 
             gyro_sample_message* a = &ring[write_idx];
             gyro_sample_message* b = &ring[!write_idx];
+
+            // smooth the timestamps
+            b->timestamp = smooth_timestamp(b->timestamp);
 
             // calculate weights
             int64_t wa = current_time - a->timestamp;

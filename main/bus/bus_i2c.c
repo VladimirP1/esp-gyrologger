@@ -14,7 +14,7 @@
 #define SCL(x) gpio_set_level(I2C_MASTER_SCL_IO, (x));
 
 #define HCLK()                   \
-    for (int i = 0; i < 8; i++) \
+    for (int i = 0; i < 2; i++) \
     {                            \
         __asm__("nop");          \
     };
@@ -34,6 +34,9 @@ esp_err_t i2c_master_init()
         .pull_up_en = GPIO_PULLUP_ENABLE};
 
     gpio_config(&io_conf);
+
+    gpio_set_drive_capability(I2C_MASTER_SCL_IO, GPIO_DRIVE_CAP_0);
+    gpio_set_drive_capability(I2C_MASTER_SDA_IO, GPIO_DRIVE_CAP_0);
 
     return ESP_OK;
 }

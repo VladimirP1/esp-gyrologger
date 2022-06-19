@@ -12,6 +12,7 @@
 typedef struct {
     QueueHandle_t gyro_raw_queue;
     QueueHandle_t gyro_interp_queue;
+    double gyro_raw_to_rads;
     struct {
         SemaphoreHandle_t mutex;
 

@@ -98,8 +98,8 @@ static void logger_task_cpp(void *params_pvoid) {
                     }
                 }
 
-                // ESP_LOGI(TAG, "i=%d, ts = %lld, int = %d", i, msg.timestamp,
-                //          (int)msg.smpl_interval_ns);
+                ESP_LOGI(TAG, "i=%d, ts = %lld, int = %d", i, msg.timestamp,
+                         (int)msg.smpl_interval_ns);
 
                 auto tmp = encoder.encode_block(integrator.quats.data());
 

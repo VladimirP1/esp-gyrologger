@@ -128,6 +128,8 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 }
 
 void gyro_mpu6050_task(void *params_pvoid) {
+    gctx.gyro_raw_to_rads = (1000.0 / 32767.0 * 3.141592 / 180.0);
+    
     uint8_t data[2];
     ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_WHO_AM_I, data, 1));
     ESP_LOGI(TAG, "WHO_AM_I = 0x%X", data[0]);

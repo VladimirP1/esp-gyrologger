@@ -77,6 +77,13 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     static int16_t accel[3];
     static bool have_gyro = false;
 
+    static int gyro_counter = 0;
+    static uint64_t gyro_counter_reset_ts = 0;
+    static uint64_t avg_sample_interval_ns = 602410;
+
+    static uint64_t timestamp = 0;
+    static uint16_t timestamp_frac = 0;
+
     vPortEnterCritical();
     i2c_register_read(DEV_ADDR, REG_FIFO_STATUS1, tmp_data, 2);
     const int fifo_bytes = tmp_data[0] | ((tmp_data[1] & 0x03) << 8);
@@ -105,7 +112,15 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
-        gyro_sample_message msg = {.timestamp = time,
+        have_gyro = false;
+        timestamp += avg_sample_interval_ns / 1000;
+        timestamp_frac += avg_sample_interval_ns % 1000;
+        if (timestamp_frac >= 1000) {
+            timestamp_frac -= 1000;
+            timestamp += 1;
+        }
+        ++gyro_counter;
+        gyro_sample_message msg = {.timestamp = timestamp,
                                    .accel_x = accel[0],
                                    .accel_y = accel[1],
                                    .accel_z = accel[2],
@@ -113,25 +128,25 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
                                    .gyro_y = gyro[1],
                                    .gyro_z = gyro[2],
                                    .fifo_backlog = fifo_bytes,
-                                   .smpl_interval_ns = 0};
+                                   .smpl_interval_ns = avg_sample_interval_ns};
         if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
             errQUEUE_FULL) {
             while (1)
                 ;
         }
     }
+    if (gyro_counter > 5000) {
+        avg_sample_interval_ns = (time - gyro_counter_reset_ts) * 1000 / gyro_counter;
+        gyro_counter = 0;
+        gyro_counter_reset_ts = time;
+    }
     time += 500;
     return high_task_awoken;
 }
 
-static void debug_reg(uint8_t dev_adr, uint8_t reg_adr) {
-    uint8_t data = 0;
-    i2c_register_read(dev_adr, reg_adr, &data, 1);
-    ESP_LOGI(TAG, "Read dev_adr=%02X, reg_adr=%02X, resp=%02X", (int)dev_adr, (int)reg_adr,
-             (int)data);
-}
-
 void gyro_lsm6_task(void* params) {
+    gctx.gyro_raw_to_rads =  (35e-3 * 3.141592 / 180.0);
+
     const uint8_t dev_adr = 0x6a;
 
     static uint8_t data[2];
@@ -140,11 +155,6 @@ void gyro_lsm6_task(void* params) {
     if (data[0] != 0x6b) {
         ESP_LOGI(TAG, "Wrong WHO_AM_I value!");
         return;
-    }
-
-    for (int i = 0; i < 10; ++i) {
-        debug_reg(dev_adr, REG_WHO_AM_I);
-        vTaskDelay(10);
     }
 
     i2c_register_write_byte(dev_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_SW_RESET));
@@ -174,7 +184,6 @@ void gyro_lsm6_task(void* params) {
 
     timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
 
-    /* Configure the alarm value and the interrupt on alarm. */
     timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 5e-4 * TIMER_SCALE);
     timer_enable_intr(TIMER_GROUP_0, TIMER_0);
 
@@ -183,10 +192,4 @@ void gyro_lsm6_task(void* params) {
     timer_start(TIMER_GROUP_0, TIMER_0);
 
     vTaskDelete(NULL);
-
-    // while (true) {
-    //     debug_reg(dev_adr, REG_FIFO_STATUS1);
-    //     debug_reg(dev_adr, REG_FIFO_STATUS2);
-    //     vTaskDelay(10);
-    // }
 }

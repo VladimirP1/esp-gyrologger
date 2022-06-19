@@ -2,6 +2,7 @@
 
 extern "C" {
 #include "gyro/gyro_types.h"
+#include "global_context.h"
 }
 #include "lib/fixquat.hpp"
 
@@ -12,7 +13,7 @@ struct BasicIntegrator {
 
     quat::quat update(const gyro_sample_message &sample) {
         if (first_run) prev_ts = sample.timestamp;
-        double scale = kMessageGyroScale * (sample.timestamp - prev_ts) / 1e6;
+        double scale = gctx.gyro_raw_to_rads * (sample.timestamp - prev_ts) / 1e6;
         quat::vec gyro{quat::base_type{sample.gyro_x * scale},
                        quat::base_type{sample.gyro_y * scale},
                        quat::base_type{sample.gyro_z * scale}};
