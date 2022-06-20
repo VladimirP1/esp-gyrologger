@@ -13,6 +13,7 @@ typedef struct {
     QueueHandle_t gyro_raw_queue;
     QueueHandle_t gyro_interp_queue;
     double gyro_raw_to_rads;
+    double accel_raw_to_g;
     volatile bool pause_polling;
     volatile bool continue_polling;
     struct {

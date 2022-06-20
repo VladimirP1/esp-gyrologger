@@ -9,12 +9,28 @@
 #define I2C_MASTER_FREQ_HZ CONFIG_I2C_MASTER_FREQ_HZ
 #define I2C_MASTER_TIMEOUT_MS 1000
 
-#define G_SDA() gpio_get_level(I2C_MASTER_SDA_IO)
-#define SDA(x) gpio_set_level(I2C_MASTER_SDA_IO, (x));
-#define SCL(x) gpio_set_level(I2C_MASTER_SCL_IO, (x));
+static inline bool G_SDA() {
+    return GPIO.in.data & (1 << I2C_MASTER_SDA_IO);
+}
+
+static inline void SDA(bool x) {
+    if (x) {
+        GPIO.out_w1ts.out_w1ts = (1 << I2C_MASTER_SDA_IO);
+    } else {
+        GPIO.out_w1tc.out_w1tc = (1 << I2C_MASTER_SDA_IO);
+    }
+}
+
+static inline void SCL(bool x) {
+    if (x) {
+        GPIO.out_w1ts.out_w1ts = (1 << I2C_MASTER_SCL_IO);
+    } else {
+        GPIO.out_w1tc.out_w1tc = (1 << I2C_MASTER_SCL_IO);
+    }
+}
 
 #define HCLK()                   \
-    for (int i = 0; i < 2; i++) \
+    for (int i = 0; i < 1; i++) \
     {                            \
         __asm__("nop");          \
     };
@@ -22,16 +38,14 @@
     HCLK();   \
     HCLK();
 
-esp_err_t i2c_master_init()
-{
+esp_err_t i2c_master_init() {
     gpio_set_level(I2C_MASTER_SCL_IO, 1);
     gpio_set_level(I2C_MASTER_SDA_IO, 1);
 
-    gpio_config_t io_conf = {
-        .intr_type = GPIO_INTR_DISABLE,
-        .mode = GPIO_MODE_INPUT_OUTPUT,
-        .pin_bit_mask = (1 << I2C_MASTER_SCL_IO) | (1 << I2C_MASTER_SDA_IO),
-        .pull_up_en = GPIO_PULLUP_ENABLE};
+    gpio_config_t io_conf = {.intr_type = GPIO_INTR_DISABLE,
+                             .mode = GPIO_MODE_INPUT_OUTPUT,
+                             .pin_bit_mask = (1 << I2C_MASTER_SCL_IO) | (1 << I2C_MASTER_SDA_IO),
+                             .pull_up_en = GPIO_PULLUP_ENABLE};
 
     gpio_config(&io_conf);
 
@@ -41,8 +55,7 @@ esp_err_t i2c_master_init()
     return ESP_OK;
 }
 
-static void IRAM_ATTR i2c_bb_start()
-{
+static void IRAM_ATTR i2c_bb_start() {
     SDA(1);
     SCL(1);
     HCLK();
@@ -51,12 +64,10 @@ static void IRAM_ATTR i2c_bb_start()
     SCL(0);
 }
 
-static uint8_t IRAM_ATTR i2c_bb_rcvbyte(uint8_t ack)
-{
+static uint8_t IRAM_ATTR i2c_bb_rcvbyte(uint8_t ack) {
     uint8_t data = 0;
     SDA(1);
-    for (uint8_t i = 0; i < 8; ++i)
-    {
+    for (uint8_t i = 0; i < 8; ++i) {
         data <<= 1;
         CLK();
         SCL(1);
@@ -74,10 +85,8 @@ static uint8_t IRAM_ATTR i2c_bb_rcvbyte(uint8_t ack)
     return data;
 }
 
-static uint8_t IRAM_ATTR i2c_bb_sendbyte(uint8_t data)
-{
-    for (uint8_t i = 0; i < 8; ++i)
-    {
+static uint8_t IRAM_ATTR i2c_bb_sendbyte(uint8_t data) {
+    for (uint8_t i = 0; i < 8; ++i) {
         HCLK();
         SDA(data & 0x80);
         HCLK();
@@ -97,8 +106,7 @@ static uint8_t IRAM_ATTR i2c_bb_sendbyte(uint8_t data)
     return ack;
 }
 
-static void IRAM_ATTR i2c_bb_stop()
-{
+static void IRAM_ATTR i2c_bb_stop() {
     SDA(0);
     HCLK();
     SCL(1);
@@ -107,28 +115,22 @@ static void IRAM_ATTR i2c_bb_stop()
     HCLK();
 }
 
-esp_err_t IRAM_ATTR i2c_register_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t *data, size_t len)
-{
-
+esp_err_t IRAM_ATTR i2c_register_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t *data,
+                                      size_t len) {
     i2c_bb_start();
-    if (!i2c_bb_sendbyte(dev_addr << 1))
-    { // WRITE
+    if (!i2c_bb_sendbyte(dev_addr << 1)) {  // WRITE
         return ESP_FAIL;
     }
 
-    if (!i2c_bb_sendbyte(reg_addr))
-    {
+    if (!i2c_bb_sendbyte(reg_addr)) {
         return ESP_FAIL;
     }
-    if (len)
-    {
+    if (len) {
         i2c_bb_start();
-        if (!i2c_bb_sendbyte(dev_addr << 1 | 1))
-        { // READ
+        if (!i2c_bb_sendbyte(dev_addr << 1 | 1)) {  // READ
             return ESP_FAIL;
         }
-        for (size_t i = 0; i < len; ++i)
-        {
+        for (size_t i = 0; i < len; ++i) {
             data[i] = i2c_bb_rcvbyte(i != len - 1);
         }
     }
@@ -137,19 +139,15 @@ esp_err_t IRAM_ATTR i2c_register_read(uint8_t dev_addr, uint8_t reg_addr, uint8_
     return ESP_OK;
 }
 
-esp_err_t IRAM_ATTR i2c_register_write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data)
-{
+esp_err_t IRAM_ATTR i2c_register_write_byte(uint8_t dev_addr, uint8_t reg_addr, uint8_t data) {
     i2c_bb_start();
-    if (!i2c_bb_sendbyte(dev_addr << 1))
-    { // WRITE
+    if (!i2c_bb_sendbyte(dev_addr << 1)) {  // WRITE
         return ESP_FAIL;
     }
-    if (!i2c_bb_sendbyte(reg_addr))
-    {
+    if (!i2c_bb_sendbyte(reg_addr)) {
         return ESP_FAIL;
     }
-    if (!i2c_bb_sendbyte(data))
-    {
+    if (!i2c_bb_sendbyte(data)) {
         return ESP_FAIL;
     }
     i2c_bb_stop();
@@ -157,7 +155,4 @@ esp_err_t IRAM_ATTR i2c_register_write_byte(uint8_t dev_addr, uint8_t reg_addr, 
     return ESP_OK;
 }
 
-esp_err_t i2c_master_deinit()
-{
-    return ESP_OK;
-}
+esp_err_t i2c_master_deinit() { return ESP_OK; }

@@ -43,7 +43,7 @@ static uint64_t smooth_update(ts_smooth_data* state, uint64_t rough_timestamp) {
 }
 
 void interpolator_task(void* params) {
-    const int sample_interval = 875;
+    const int sample_interval = 300;
     uint64_t current_time = 0;
     ts_smooth_data smooth_state;
     smooth_init(&smooth_state);
@@ -54,11 +54,6 @@ void interpolator_task(void* params) {
         xQueueReceive(gctx.gyro_raw_queue, &ring[write_idx], portMAX_DELAY);
 
         write_idx = !write_idx;
-
-        if (ring[!write_idx].fifo_backlog > 1000) {
-            ESP_LOGE(TAG, "fifo overrun %d", ring[!write_idx].fifo_backlog);
-            abort();
-        }
 
         gyro_sample_message* a = &ring[write_idx];
         gyro_sample_message* b = &ring[!write_idx];

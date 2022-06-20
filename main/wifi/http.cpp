@@ -33,9 +33,10 @@ static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
 version,1.1
 id,esplog
 orientation,YxZ
-tscale,0.00175
+tscale,0.00180
 gscale,0.00053263221
-t,gx,gy,gz
+ascale,0.0001
+t,gx,gy,gz,ax,ay,ax
 )--",
                           HTTPD_RESP_USE_STRLEN);
 
@@ -64,13 +65,19 @@ t,gx,gy,gz
 
         auto [decoded_bytes, dquats, scale] = decoder.decode_block(buf2);
         for (auto& q : dquats) {
-            quat::vec rv = (q * prev_quat.conj()).axis_angle();
+            quat::vec rv = (q.conj() * prev_quat).axis_angle();
+            quat::vec gravity =
+                q.conj().rotate_point({quat::base_type{}, quat::base_type{}, quat::base_type{-1.0}});
+
             prev_quat = q;
             if (time != 0) {
                 double scale = sample_rate * gscale;
-                int size = snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d\n",
-                                    time, (int)(double(rv.x) * scale), (int)(double(rv.y) * scale),
-                                    (int)(double(rv.z) * scale));
+                double ascale = 10000;
+                int size =
+                    snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d,%d,%d,%d\n",
+                             time, (int)(double(rv.x) * scale), (int)(double(rv.y) * scale),
+                             (int)(double(rv.z) * scale), (int)(double(gravity.x) * ascale),
+                             (int)(double(gravity.y) * ascale), (int)(double(gravity.z) * ascale));
                 wptr += size;
             }
             time++;

@@ -95,7 +95,6 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
                                    .gyro_x = (int16_t)((tmp_data[6] << 8) | tmp_data[7]),
                                    .gyro_y = (int16_t)((tmp_data[8] << 8) | tmp_data[9]),
                                    .gyro_z = (int16_t)((tmp_data[10] << 8) | tmp_data[11]),
-                                   .fifo_backlog = fifo_bytes,
                                    .smpl_interval_ns = 0};
         // if ((time % 1000000) < 500000) {
         //     msg.gyro_y = (time % 100000) < 50000 ? -10000 : 10000;

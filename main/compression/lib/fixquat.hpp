@@ -16,7 +16,12 @@ struct vec {
     inline vec operator-(const vec &b) const;
     inline vec &operator-=(const vec &b);
     inline vec &operator+=(const vec &b);
+    inline vec operator/(base_type div) const;
+    inline vec &operator/=(base_type div);
+    inline vec operator*(base_type mul) const;
+    inline vec &operator*=(base_type mul);
     inline base_type norm() const;
+    inline vec normalized() const;
 };
 
 inline vec vec::operator-(const vec &b) const {
@@ -39,7 +44,41 @@ inline vec &vec::operator+=(const vec &b) {
     return *this;
 }
 
+inline vec vec::operator/(base_type div) const {
+    vec ret = *this;
+    ret /= div;
+    return ret;
+}
+
+inline vec &vec::operator/=(base_type div) {
+    x /= div;
+    y /= div;
+    z /= div;
+    return *this;
+}
+
+inline vec vec::operator*(base_type mul) const {
+    vec ret = *this;
+    ret *= mul;
+    return ret;
+}
+
+inline vec &vec::operator*=(base_type mul) {
+    x *= mul;
+    y *= mul;
+    z *= mul;
+    return *this;
+}
+
 inline base_type vec::norm() const { return fpm::sqrt(x * x + y * y + z * z); }
+
+inline vec vec::normalized() const {
+    auto n = norm();
+    if (n == base_type{}) {
+        return {};
+    }
+    return (*this) / norm();
+}
 
 struct quat {
     inline quat();
@@ -109,6 +148,9 @@ inline quat quat::conj() const {
 
 inline quat quat::normalized() const {
     base_type n = norm();
+    if (n == base_type{}) {
+        return {base_type{}, base_type{}, base_type{}, base_type{}};
+    }
     return {w / n, x / n, y / n, z / n};
 }
 

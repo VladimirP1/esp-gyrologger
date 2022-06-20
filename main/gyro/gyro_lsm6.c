@@ -68,14 +68,14 @@ static const char* TAG = "gyro_lsm6";
 #define TIMER_DIVIDER (16)
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
-static const uint8_t dev_adr = 0x6a;
+static uint8_t dev_adr = 0x6a;
 
 static bool IRAM_ATTR gyro_timer_cb(void* args) {
     static uint8_t tmp_data[7];
     static uint64_t time = 0;
     static int16_t gyro[3];
     static int16_t accel[3];
-    static bool have_gyro = false;
+    static bool have_gyro = false, have_accel = false;
 
     if (gctx.pause_polling) {
         i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (0 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
@@ -91,8 +91,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     const int fifo_bytes = tmp_data[0] | ((tmp_data[1] & 0x03) << 8);
 
     if (fifo_bytes > 0) {
-        i2c_register_read(dev_adr, REG_FIFO_DATA_OUT_TAG, tmp_data, 1);
-        i2c_register_read(dev_adr, REG_FIFO_DATA_OUT_X_L, tmp_data + 1, 6);
+        i2c_register_read(dev_adr, REG_FIFO_DATA_OUT_TAG, tmp_data, 7);
         uint8_t tag = (tmp_data[0] >> 3);
         if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_GYRO) {
             gyro[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]);
@@ -100,9 +99,10 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
             gyro[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]);
             have_gyro = true;
         } else if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_ACCEL) {
-            accel[0] = (int16_t)((tmp_data[0] << 8) | tmp_data[1]);
-            accel[1] = (int16_t)((tmp_data[2] << 8) | tmp_data[3]);
-            accel[2] = (int16_t)((tmp_data[4] << 8) | tmp_data[5]);
+            accel[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]);
+            accel[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]);
+            accel[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]);
+            have_accel = true;
         }
     }
 
@@ -113,7 +113,6 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
-        have_gyro = false;
         gyro_sample_message msg = {.timestamp = time,
                                    .accel_x = accel[0],
                                    .accel_y = accel[1],
@@ -121,27 +120,43 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
                                    .gyro_x = gyro[0],
                                    .gyro_y = gyro[1],
                                    .gyro_z = gyro[2],
-                                   .fifo_backlog = fifo_bytes,
-                                   .smpl_interval_ns = 0};
+                                   .smpl_interval_ns = 0,
+                                   .flags = have_accel ? GYRO_SAMPLE_NEW_ACCEL_DATA : 0};
+        have_gyro = false;
+        have_accel = false;
         if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
             errQUEUE_FULL) {
             while (1)
                 ;
         }
     }
-    time += 500;
+    time += 220;
     return high_task_awoken;
 }
 
 void gyro_lsm6_task(void* params) {
-    gctx.gyro_raw_to_rads =  (35e-3 * 3.141592 / 180.0);
+    gctx.gyro_raw_to_rads = (35e-3 * 3.141592 / 180.0);
+    gctx.accel_raw_to_g = 0.488e-3;
 
-    static uint8_t data[2];
-    i2c_register_read(dev_adr, REG_WHO_AM_I, data, 1);
-    ESP_LOGI(TAG, "WHO_AM_I = 0x%X", data[0]);
-    if (data[0] != 0x6b) {
-        ESP_LOGI(TAG, "Wrong WHO_AM_I value!");
-        return;
+    bool probe_success = false;
+    static const uint8_t test_i2c_adrs[] = {0x6a, 0x6b};
+    for (int i = 0; i < sizeof(test_i2c_adrs); ++i) {
+        dev_adr = test_i2c_adrs[i];
+
+        static uint8_t data[2];
+        i2c_register_read(dev_adr, REG_WHO_AM_I, data, 1);
+        ESP_LOGI(TAG, "WHO_AM_I @ 0x%02X = 0x%02X", dev_adr, data[0]);
+
+        if (data[0] == 0x6b) {
+            ESP_LOGI(TAG, "LSM6DSR detected");
+            probe_success = true;
+            break;
+        }
+    }
+
+    if (!probe_success) {
+        ESP_LOGI(TAG, "probe failed");
+        vTaskDelete(NULL);
     }
 
     i2c_register_write_byte(dev_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_SW_RESET));
@@ -152,11 +167,11 @@ void gyro_lsm6_task(void* params) {
                             (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
 
     // clang-format off
-    i2c_register_write_byte(dev_adr, REG_CTRL6_C, (3 << REG_CTRL6_C_BIT_FTYPE_0));
-    i2c_register_write_byte(dev_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G));
-    i2c_register_write_byte(dev_adr, REG_CTRL2_G, (8 << REG_CTRL2_G_BIT_ODR_G0) | (2 << REG_CTRL2_G_BIT_FS0_G)); // 8 is 1.66 khz
+    // i2c_register_write_byte(dev_adr, REG_CTRL6_C, (4 << REG_CTRL6_C_BIT_FTYPE_0));
+    // i2c_register_write_byte(dev_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G));
+    i2c_register_write_byte(dev_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (2 << REG_CTRL2_G_BIT_FS0_G)); // 9 is 3.33 khz
     i2c_register_write_byte(dev_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 5 is 208 hz
-    i2c_register_write_byte(dev_adr, REG_FIFO_CTRL3, (8 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0));
+    i2c_register_write_byte(dev_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0));
     i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
     // clang-format on
 
@@ -171,7 +186,7 @@ void gyro_lsm6_task(void* params) {
 
     timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
 
-    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, 5e-4 * TIMER_SCALE);
+    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, .22e-3 * TIMER_SCALE);
     timer_enable_intr(TIMER_GROUP_0, TIMER_0);
 
     timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb, NULL, ESP_INTR_FLAG_IRAM);

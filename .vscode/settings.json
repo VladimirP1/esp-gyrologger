@@ -109,7 +109,13 @@
         "cassert": "cpp",
         "freertos.h": "c",
         "gyro_types.h": "c",
-        "gyro_mpu6050.h": "c"
+        "gyro_mpu6050.h": "c",
+        "*.rh": "c",
+        "cerrno": "c",
+        "cfloat": "c",
+        "climits": "c",
+        "cstdbool": "c",
+        "*.inc": "c"
     },
     "idf.flashType": "UART",
     "idf.adapterTargetName": "esp32c3",
