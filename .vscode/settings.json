@@ -115,7 +115,9 @@
         "cfloat": "c",
         "climits": "c",
         "cstdbool": "c",
-        "*.inc": "c"
+        "*.inc": "c",
+        "esp_check.h": "c",
+        "esp_wifi.h": "c"
     },
     "idf.flashType": "UART",
     "idf.adapterTargetName": "esp32c3",

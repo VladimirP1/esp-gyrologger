@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 namespace {
 const char html_prefix[] = R"--(
 <!doctype html>

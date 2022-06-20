@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 #include "gyro_lsm6.h"
 #include "gyro_types.h"
 

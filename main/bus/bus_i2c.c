@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 #include "bus_i2c.h"
 
 #include <hal/gpio_ll.h>

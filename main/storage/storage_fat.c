@@ -1,3 +1,5 @@
+// SPDX-License-Identifier: LGPL-2.1-or-later
+
 #include "storage_fat.h"
 
 #include <esp_vfs.h>
