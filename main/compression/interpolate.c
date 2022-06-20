@@ -84,9 +84,10 @@ void interpolator_task(void* params) {
             msg.gyro_y = (a->gyro_y * wa + b->gyro_y * wb) / denom;
             msg.gyro_z = (a->gyro_z * wa + b->gyro_z * wb) / denom;
 
-            msg.accel_x = (a->accel_x * wa + b->accel_x * wb) / denom;
-            msg.accel_y = (a->accel_y * wa + b->accel_y * wb) / denom;
-            msg.accel_z = (a->accel_z * wa + b->accel_z * wb) / denom;
+            // TODO: fix accel interpolation
+            // msg.accel_x = (a->accel_x * wa + b->accel_x * wb) / denom;
+            // msg.accel_y = (a->accel_y * wa + b->accel_y * wb) / denom;
+            // msg.accel_z = (a->accel_z * wa + b->accel_z * wb) / denom;
 
             msg.smpl_interval_ns = smooth_state.avg_sample_interval_ns;
 

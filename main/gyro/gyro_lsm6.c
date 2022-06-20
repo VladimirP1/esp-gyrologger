@@ -167,8 +167,8 @@ void gyro_lsm6_task(void* params) {
                             (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
 
     // clang-format off
-    // i2c_register_write_byte(dev_adr, REG_CTRL6_C, (4 << REG_CTRL6_C_BIT_FTYPE_0));
-    // i2c_register_write_byte(dev_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G));
+    i2c_register_write_byte(dev_adr, REG_CTRL6_C, (3 << REG_CTRL6_C_BIT_FTYPE_0));
+    i2c_register_write_byte(dev_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G));
     i2c_register_write_byte(dev_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (2 << REG_CTRL2_G_BIT_FS0_G)); // 9 is 3.33 khz
     i2c_register_write_byte(dev_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 5 is 208 hz
     i2c_register_write_byte(dev_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0));
