@@ -9,9 +9,8 @@
 #define I2C_MASTER_FREQ_HZ CONFIG_I2C_MASTER_FREQ_HZ
 #define I2C_MASTER_TIMEOUT_MS 1000
 
-static inline bool G_SDA() {
-    return GPIO.in.data & (1 << I2C_MASTER_SDA_IO);
-}
+#if CONFIG_IDF_TARGET_ESP32C3
+static inline bool G_SDA() { return GPIO.in.data & (1 << I2C_MASTER_SDA_IO); }
 
 static inline void SDA(bool x) {
     if (x) {
@@ -29,11 +28,37 @@ static inline void SCL(bool x) {
     }
 }
 
-#define HCLK()                   \
-    for (int i = 0; i < 1; i++) \
-    {                            \
-        __asm__("nop");          \
+#define HCLK()                    \
+    for (int i = 0; i < 1; i++) { \
+        __asm__("nop");           \
     };
+
+#elif CONFIG_IDF_TARGET_ESP32
+static inline bool G_SDA() { return GPIO.in & (1 << I2C_MASTER_SDA_IO); }
+
+static inline void SDA(bool x) {
+    if (x) {
+        GPIO.out_w1ts = (1 << I2C_MASTER_SDA_IO);
+    } else {
+        GPIO.out_w1tc = (1 << I2C_MASTER_SDA_IO);
+    }
+}
+
+static inline void SCL(bool x) {
+    if (x) {
+        GPIO.out_w1ts = (1 << I2C_MASTER_SCL_IO);
+    } else {
+        GPIO.out_w1tc = (1 << I2C_MASTER_SCL_IO);
+    }
+}
+
+#define HCLK()                    \
+    for (int i = 0; i < 10; i++) { \
+        __asm__("nop");           \
+    };
+
+#endif
+
 #define CLK() \
     HCLK();   \
     HCLK();

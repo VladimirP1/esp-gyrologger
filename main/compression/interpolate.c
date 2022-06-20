@@ -49,7 +49,8 @@ void interpolator_task(void* params) {
     smooth_init(&smooth_state);
 
     bool write_idx = 0;
-    gyro_sample_message ring[2];
+    gyro_sample_message ring[2] = {{}, {}};
+
     while (true) {
         xQueueReceive(gctx.gyro_raw_queue, &ring[write_idx], portMAX_DELAY);
 
@@ -75,9 +76,9 @@ void interpolator_task(void* params) {
                 ESP_LOGW(TAG, "bad sample weights");
                 continue;
             }
-
+            
             // interpolate
-            gyro_sample_message msg = *a;
+            gyro_sample_message msg = *b;
             msg.timestamp = current_time;
             msg.gyro_x = (a->gyro_x * wa + b->gyro_x * wb) / denom;
             msg.gyro_y = (a->gyro_y * wa + b->gyro_y * wb) / denom;
@@ -90,6 +91,9 @@ void interpolator_task(void* params) {
             msg.smpl_interval_ns = smooth_state.avg_sample_interval_ns;
 
             xQueueSend(gctx.gyro_interp_queue, &msg, portMAX_DELAY);
+
+            a->flags &= ~GYRO_SAMPLE_NEW_ACCEL_DATA;
+            b->flags &= ~GYRO_SAMPLE_NEW_ACCEL_DATA;
 
             current_time += sample_interval;
         }

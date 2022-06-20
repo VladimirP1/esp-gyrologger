@@ -42,8 +42,9 @@ static void logger_task_cpp(void *params_pvoid) {
     FILE *f = NULL;
 
     BasicIntegrator integrator(kBlockSize, 6);
-    Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0, kBlockSize * 2);
-    
+    Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0,
+                  kBlockSize * 2);
+
     int offset_gx{}, offset_gy{}, offset_gz{};
     TickType_t prev_dump = xTaskGetTickCount();
     for (int i = 0;; ++i) {
@@ -92,8 +93,7 @@ static void logger_task_cpp(void *params_pvoid) {
                     }
                 }
 
-                ESP_LOGI(TAG, "i=%d, ts = %lld, int = %d", i, msg.timestamp,
-                         (int)msg.smpl_interval_ns);
+                ESP_LOGI(TAG, "interval = %u", msg.smpl_interval_ns);
 
                 auto tmp = encoder.encode_block(integrator.quats.data());
 
@@ -153,7 +153,6 @@ static void logger_task_cpp(void *params_pvoid) {
     }
 }
 
-
 static int do_logger_cmd(int argc, char **argv) {
     if (argc == 2) {
         bool log = atoi(argv[1]);
@@ -172,7 +171,7 @@ static int do_logger_cmd(int argc, char **argv) {
                 return 1;
             }
             fseek(f, 0L, SEEK_END);
-            ESP_LOGI(TAG, "file size is %d bytes", ftell(f));
+            ESP_LOGI(TAG, "file size is %ld bytes", ftell(f));
             fseek(f, 0L, SEEK_SET);
 
             // EntropyDecoder decoder(kScaleBits, kBlockSize);

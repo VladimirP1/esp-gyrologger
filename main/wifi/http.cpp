@@ -53,7 +53,7 @@ t,gx,gy,gz,ax,ay,ax
     }
 
     fseek(f, 0L, SEEK_END);
-    ESP_LOGI(TAG, "file size is %d bytes", ftell(f));
+    ESP_LOGI(TAG, "file size is %ld bytes", ftell(f));
     fseek(f, 0L, SEEK_SET);
 
     Coder decoder(kBlockSize);
@@ -136,7 +136,7 @@ static esp_err_t download_get_handler(httpd_req_t* req) {
 }
 
 static const httpd_uri_t download_get = {
-    .uri = "/download", .method = HTTP_GET, .handler = download_get_handler, NULL};
+    .uri = "/download", .method = HTTP_GET, .handler = download_get_handler, .user_ctx = NULL};
 
 std::pair<int, int> get_free_space_kb() {
     constexpr int kSectorBytes = 4096;
@@ -261,7 +261,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 }
 
 static const httpd_uri_t root_get = {
-    .uri = "/", .method = HTTP_GET, .handler = root_get_handler, NULL};
+    .uri = "/", .method = HTTP_GET, .handler = root_get_handler, .user_ctx = NULL};
 
 static esp_err_t root_post_handler(httpd_req_t* req) {
     char content[100];
@@ -324,7 +324,7 @@ static esp_err_t root_post_handler(httpd_req_t* req) {
 }
 
 static const httpd_uri_t root_post = {
-    .uri = "/", .method = HTTP_POST, .handler = root_post_handler, NULL};
+    .uri = "/", .method = HTTP_POST, .handler = root_post_handler, .user_ctx = NULL};
 
 static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
