@@ -20,6 +20,11 @@ static const char* TAG = "http-server";
 
 #include "http_strings.hpp"
 
+#define HANDLE(x)        \
+    if ((x) != ESP_OK) { \
+        return ESP_FAIL; \
+    }
+
 static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     static uint8_t buf2[2000];
     static char buf_text[4096];
@@ -29,7 +34,7 @@ static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     const double sample_rate = 8000.0 / 14;
     const double gscale = 1 / 0.00053263221;
 
-    httpd_resp_send_chunk(req, R"--(GYROFLOW IMU LOG
+    HANDLE(httpd_resp_send_chunk(req, R"--(GYROFLOW IMU LOG
 version,1.1
 id,esplog
 orientation,YxZ
@@ -38,13 +43,13 @@ gscale,0.00053263221
 ascale,0.0001
 t,gx,gy,gz,ax,ay,ax
 )--",
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
 
     ESP_LOGI(TAG, "Reading file");
     FILE* f = fopen(filename, "rb");
     if (f == NULL) {
         ESP_LOGE(TAG, "Failed to open file for reading");
-        return 1;
+        return ESP_FAIL;
     }
 
     fseek(f, 0L, SEEK_END);
@@ -66,8 +71,8 @@ t,gx,gy,gz,ax,ay,ax
         auto [decoded_bytes, dquats, scale] = decoder.decode_block(buf2);
         for (auto& q : dquats) {
             quat::vec rv = (q.conj() * prev_quat).axis_angle();
-            quat::vec gravity =
-                q.conj().rotate_point({quat::base_type{}, quat::base_type{}, quat::base_type{-1.0}});
+            quat::vec gravity = q.conj().rotate_point(
+                {quat::base_type{}, quat::base_type{}, quat::base_type{-1.0}});
 
             prev_quat = q;
             if (time != 0) {
@@ -83,7 +88,10 @@ t,gx,gy,gz,ax,ay,ax
             time++;
 
             if (wptr - buf_text > 3200) {
-                httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN);
+                if(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN) != ESP_OK) {
+                    fclose(f);
+                    return ESP_FAIL;
+                }
                 wptr = buf_text;
             }
         }
@@ -97,10 +105,10 @@ t,gx,gy,gz,ax,ay,ax
     fclose(f);
 
     if (wptr != buf_text) {
-        httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN);
+        HANDLE(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN));
     }
 
-    httpd_resp_send_chunk(req, NULL, 0);
+    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
 
     gctx.continue_polling = true;
 
@@ -143,12 +151,12 @@ std::pair<int, int> get_free_space_kb() {
 }
 
 static esp_err_t root_get_handler(httpd_req_t* req) {
-    httpd_resp_send_chunk(req, html_prefix, HTTPD_RESP_USE_STRLEN);
+    HANDLE(httpd_resp_send_chunk(req, html_prefix, HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, "<body><h1>EspLog (", HTTPD_RESP_USE_STRLEN);
-    httpd_resp_send_chunk(req, gctx.logger_control.busy ? "BUSY" : "IDLE", HTTPD_RESP_USE_STRLEN);
+    HANDLE(httpd_resp_send_chunk(req, "<body><h1>EspLog (", HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, gctx.logger_control.busy ? "BUSY" : "IDLE", HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, R"--()</h1>
+    HANDLE(httpd_resp_send_chunk(req, R"--()</h1>
     <h2>Control</h2>
     <button style="color:green;" class="command_btn" name="command" form="form_simple" value="calibrate">0</button>
     <button style="color:red;" class="command_btn" name="command" form="form_simple" value="record">&#x23fa;</button>
@@ -159,48 +167,48 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
         <tr>
             <td>Active</td>
             <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.busy).c_str(),
-                          HTTPD_RESP_USE_STRLEN);
+    HANDLE(httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.busy).c_str(),
+                          HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, R"--(</td>
+    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
         <tr>
             <td>Free space (kBytes)</td>
             <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
 
     auto free_space = get_free_space_kb();
-    httpd_resp_send_chunk(req, std::to_string(free_space.first).c_str(), HTTPD_RESP_USE_STRLEN);
+    HANDLE(httpd_resp_send_chunk(req, std::to_string(free_space.first).c_str(), HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, R"--(</td>
+    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
     <tr>
         <td>Last log length (samples)</td>
         <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.total_samples_written).c_str(),
-                          HTTPD_RESP_USE_STRLEN);
+    HANDLE(httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.total_samples_written).c_str(),
+                          HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, R"--(</td>
+    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
         <tr>
             <td>Last log avg rate (Bytes/min)</td>
             <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req,
+    HANDLE(httpd_resp_send_chunk(req,
                           std::to_string(gctx.logger_control.avg_logging_rate_bytes_min).c_str(),
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, R"--(</td>
+    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
     </table>
     <h2>Log download</h2>
     <table class="download_table">)--",
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
     bool busy = true;
     if (xSemaphoreTake(gctx.logger_control.mutex, 2)) {
         busy = gctx.logger_control.busy;
@@ -223,7 +231,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
             <td class="download_table_mid_cell">%dKB</td>)--",
                          i, i, size_kb);
 
-                httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN);
+                HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
 
                 snprintf(buf2, sizeof(buf2), R"--(<td>
                 <button style="color:black;" class="delete_btn" name="unlink" form="form_simple"
@@ -232,23 +240,23 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
         </tr>)--",
                          i);
 
-                httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN);
+                HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
             }
         }
     } else {
-        httpd_resp_send_chunk(req, R"--(<tr><td>Logger is BUSY!</td></tr>)--",
-                              HTTPD_RESP_USE_STRLEN);
+        HANDLE(httpd_resp_send_chunk(req, R"--(<tr><td>Logger is BUSY!</td></tr>)--",
+                              HTTPD_RESP_USE_STRLEN));
     }
-    httpd_resp_send_chunk(req, R"--(</table>
+    HANDLE(httpd_resp_send_chunk(req, R"--(</table>
 
 
     <form id="form_simple" method="post" action=""></form>
 </body>)--",
-                          HTTPD_RESP_USE_STRLEN);
+                          HTTPD_RESP_USE_STRLEN));
 
-    httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN);
-    httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN);
-    httpd_resp_send_chunk(req, NULL, 0);
+    HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
 }
 
