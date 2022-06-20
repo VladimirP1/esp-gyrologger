@@ -5,7 +5,7 @@
             "cStandard": "c11",
             "cppStandard": "c++20",
             "compileCommands": "${workspaceFolder}/build/compile_commands.json",
-            "compilerPath": "C:\\Users\\Dell\\.espressif\\tools\\xtensa-esp32-elf\\esp-2021r2-patch3-8.4.0\\xtensa-esp32-elf\\bin\\xtensa-esp32-elf-gcc.exe"
+            "compilerPath": "C:\\Users\\Dell\\.espressif\\tools\\riscv32-esp-elf\\esp-2021r2-patch3-8.4.0\\riscv32-esp-elf\\bin\\riscv32-esp-elf-gcc.exe"
         }
     ],
     "version": 4
