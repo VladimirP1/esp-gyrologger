@@ -10,6 +10,8 @@ The following IMUs can be used over the i2c bus:
 #### EspLog
 ![esp32 + mpu6050 logger](img/small_logger_esplog_lsm6dsr.jpg)
 
+Note: the final version won't need an external 3.3v LDO
+
 #### Simple esp32c3 logger
 ![esp32 + mpu6050 logger](img/small_logger_esp32c3_mpu6050.jpg)
 
