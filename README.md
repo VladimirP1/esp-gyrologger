@@ -14,8 +14,8 @@ This is all you need (except wires), this should coust about $5:
 * [AMS1117 3.3v LDO](https://aliexpress.ru/item/32659371619.html)
 * [USB-C breakout bord](https://aliexpress.ru/item/1005002795893679.html)
 
-#### Option 2 - JLCPCB PCBA order (in development)
-TODO
+#### Option 2 - JLCPCB PCBA order
+[EasyEDA project](https://oshwlab.com/vladimir.pinchuk01/gyro-logger-esp32c3_copy)
 
 ### Hardware prototypes
 #### EspLog
