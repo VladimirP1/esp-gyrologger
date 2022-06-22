@@ -8,6 +8,7 @@ The following IMUs can be used over the i2c bus:
 
 ### How to build
 #### Option 1 - from modules
+This is all you need (except wires), this should coust about $5:
 * [ESP32-C3-01M (4M)](https://aliexpress.ru/item/1005003092302540.html)
 * [MPU6050](https://aliexpress.ru/item/32340949017.html)
 * [AMS1117 3.3v LDO](https://aliexpress.ru/item/32659371619.html)
