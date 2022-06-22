@@ -12,9 +12,11 @@ This is all you need (except wires), this should coust about $5:
 * [ESP32-C3-01M (4M)](https://aliexpress.ru/item/1005003092302540.html)
 * [MPU6050](https://aliexpress.ru/item/32340949017.html)
 * [AMS1117 3.3v LDO](https://aliexpress.ru/item/32659371619.html)
-* [USB-C breakout bord](https://aliexpress.ru/item/1005002795893679.html)
+* [USB-C breakout board](https://aliexpress.ru/item/1005002795893679.html)
 
 #### Option 2 - JLCPCB PCBA order
+Although the previous version of this PCB has been manufacted and assembled by hand, found bugs were fixed in this version, no guarantees that this version is bug-free.
+
 [EasyEDA project](https://oshwlab.com/vladimir.pinchuk01/gyro-logger-esp32c3_copy)
 
 ### Hardware prototypes
