@@ -40,6 +40,12 @@ static uint64_t smooth_update(ts_smooth_data* state, uint64_t rough_timestamp) {
         state->gyro_counter = 0;
         state->gyro_counter_reset_ts = rough_timestamp;
         ESP_LOGI(TAG, "avg_sample_interval_ns = %llu", state->avg_sample_interval_ns);
+        if (state->avg_sample_interval_ns > 1200000) {
+            ESP_LOGW(TAG, "avg sample interval invalid. resetting smoother state");
+            state->avg_sample_interval_ns = 100;
+            state->gyro_counter = 0;
+            state->gyro_counter_reset_ts = rough_timestamp;
+        }
     }
     return state->timestamp;
 }
@@ -65,16 +71,7 @@ void interpolator_task(void* params) {
         b->timestamp = smooth_update(&smooth_state, b->timestamp);
 
         // advance current time if possible
-        int lim = 0;
         while (current_time <= ring[!write_idx].timestamp) {
-            if (++lim > 4) {
-                ESP_LOGI(TAG, "current time=%llu, msg time=%llu", current_time,
-                         ring[!write_idx].timestamp);
-                current_time = ring[!write_idx].timestamp;
-                ESP_LOGW(TAG, "time discontinuty");
-                break;
-            }
-
             // calculate weights
             int64_t wa = current_time - a->timestamp;
             int64_t wb = b->timestamp - current_time;
