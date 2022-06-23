@@ -25,7 +25,7 @@ static void smooth_init(ts_smooth_data* state) {
     state->timestamp_frac = 0;
 }
 
-static uint64_t smooth_update(ts_smooth_data* state, uint64_t rough_timestamp) {
+static uint64_t smooth_update(ts_smooth_data* state, uint64_t rough_timestamp, bool reset) {
     state->timestamp += state->avg_sample_interval_ns / 1000;
     state->timestamp_frac += state->avg_sample_interval_ns % 1000;
     if (state->timestamp_frac >= 1000) {
@@ -34,18 +34,17 @@ static uint64_t smooth_update(ts_smooth_data* state, uint64_t rough_timestamp) {
     }
     ++state->gyro_counter;
 
-    if (state->gyro_counter > 10000) {
+    if (reset) {
+        ESP_LOGW(TAG, "avg sample interval invalid. resetting smoother state");
+        state->avg_sample_interval_ns = 100;
+        state->gyro_counter = 0;
+        state->gyro_counter_reset_ts = rough_timestamp;
+    } else if (state->gyro_counter > 10000) {
         state->avg_sample_interval_ns =
             (rough_timestamp - state->gyro_counter_reset_ts) * 1000 / state->gyro_counter;
         state->gyro_counter = 0;
         state->gyro_counter_reset_ts = rough_timestamp;
         ESP_LOGI(TAG, "avg_sample_interval_ns = %llu", state->avg_sample_interval_ns);
-        if (state->avg_sample_interval_ns > 1200000) {
-            ESP_LOGW(TAG, "avg sample interval invalid. resetting smoother state");
-            state->avg_sample_interval_ns = 100;
-            state->gyro_counter = 0;
-            state->gyro_counter_reset_ts = rough_timestamp;
-        }
     }
     return state->timestamp;
 }
@@ -68,7 +67,8 @@ void interpolator_task(void* params) {
         gyro_sample_message* b = &ring[!write_idx];
 
         // smooth the timestamps
-        b->timestamp = smooth_update(&smooth_state, b->timestamp);
+        b->timestamp =
+            smooth_update(&smooth_state, b->timestamp, b->flags & GYRO_SAMPLE_PIPELINE_RESET);
 
         // advance current time if possible
         while (current_time <= ring[!write_idx].timestamp) {

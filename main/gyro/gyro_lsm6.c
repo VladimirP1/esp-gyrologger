@@ -77,7 +77,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     static uint64_t time = 0;
     static int16_t gyro[3];
     static int16_t accel[3];
-    static bool have_gyro = false, have_accel = false;
+    static bool have_gyro = false, have_accel = false, pipeline_reset = false;
 
     if (gctx.pause_polling) {
         i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (0 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
@@ -86,7 +86,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     } else if (gctx.continue_polling) {
         i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
         gctx.continue_polling = false;
-        return false;
+        pipeline_reset = true;
     }
 
     i2c_register_read(dev_adr, REG_FIFO_STATUS1, tmp_data, 2);
@@ -123,9 +123,11 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
                                    .gyro_y = gyro[1],
                                    .gyro_z = gyro[2],
                                    .smpl_interval_ns = 0,
-                                   .flags = have_accel ? GYRO_SAMPLE_NEW_ACCEL_DATA : 0};
+                                   .flags = (have_accel ? GYRO_SAMPLE_NEW_ACCEL_DATA : 0) |
+                                            (pipeline_reset ? GYRO_SAMPLE_PIPELINE_RESET : 0)};
         have_gyro = false;
         have_accel = false;
+        pipeline_reset = false;
         if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
             errQUEUE_FULL) {
             while (1)

@@ -18,4 +18,5 @@ typedef struct
 
 typedef enum {
     GYRO_SAMPLE_NEW_ACCEL_DATA = 1,
+    GYRO_SAMPLE_PIPELINE_RESET = 2,
 } gyro_sample_flags_t;
