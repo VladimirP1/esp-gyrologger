@@ -18,6 +18,7 @@
 #include "wifi/wifi.h"
 #include "wifi/http.h"
 #include "compression/interpolate.h"
+#include "misc/misc.h"
 
 #include "global_context.h"
 
@@ -39,6 +40,8 @@ void app_main(void) {
     xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     // xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     xTaskCreate(gyro_lsm6_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
+
+    xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
     
 
     // Console init
