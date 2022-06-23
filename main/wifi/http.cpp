@@ -6,6 +6,7 @@ extern "C" {
 #include <esp_http_server.h>
 #include <esp_event.h>
 #include <esp_log.h>
+#include <esp_partition.h>
 
 #include <stdio.h>
 
@@ -45,7 +46,7 @@ gscale,0.00053263221
 ascale,0.0001
 t,gx,gy,gz,ax,ay,ax
 )--",
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
 
     ESP_LOGI(TAG, "Reading file");
     FILE* f = fopen(filename, "rb");
@@ -90,7 +91,7 @@ t,gx,gy,gz,ax,ay,ax
             time++;
 
             if (wptr - buf_text > 3200) {
-                if(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN) != ESP_OK) {
+                if (httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN) != ESP_OK) {
                     fclose(f);
                     return ESP_FAIL;
                 }
@@ -140,6 +141,17 @@ static esp_err_t download_get_handler(httpd_req_t* req) {
 static const httpd_uri_t download_get = {
     .uri = "/download", .method = HTTP_GET, .handler = download_get_handler, .user_ctx = NULL};
 
+static esp_err_t format_get_handler(httpd_req_t* req) {
+    const esp_partition_t* storage_partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "storage");
+    ESP_ERROR_CHECK(esp_partition_erase_range(storage_partition, 0, 4096));
+    esp_restart();
+    return ESP_OK;
+}
+
+static const httpd_uri_t format_get = {
+    .uri = "/format", .method = HTTP_GET, .handler = format_get_handler, .user_ctx = NULL};
+
 std::pair<int, int> get_free_space_kb() {
     constexpr int kSectorBytes = 4096;
     FATFS* fs;
@@ -156,7 +168,8 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, html_prefix, HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, "<body><h1>EspLog (", HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, gctx.logger_control.busy ? "BUSY" : "IDLE", HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, gctx.logger_control.busy ? "BUSY" : "IDLE",
+                                 HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, R"--()</h1>
     <h2>Control</h2>
@@ -169,48 +182,50 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
         <tr>
             <td>Active</td>
             <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.busy).c_str(),
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
         <tr>
             <td>Free space (kBytes)</td>
             <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
 
     auto free_space = get_free_space_kb();
-    HANDLE(httpd_resp_send_chunk(req, std::to_string(free_space.first).c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, std::to_string(free_space.first).c_str(),
+                                 HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
     <tr>
         <td>Last log length (samples)</td>
         <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
 
-    HANDLE(httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.total_samples_written).c_str(),
-                          HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req,
+                                 std::to_string(gctx.logger_control.total_samples_written).c_str(),
+                                 HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
         <tr>
             <td>Last log avg rate (Bytes/min)</td>
             <td class="status_value_table_cell">)--",
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
 
-    HANDLE(httpd_resp_send_chunk(req,
-                          std::to_string(gctx.logger_control.avg_logging_rate_bytes_min).c_str(),
-                          HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(
+        req, std::to_string(gctx.logger_control.avg_logging_rate_bytes_min).c_str(),
+        HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
     </table>
     <h2>Log download</h2>
     <table class="download_table">)--",
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
     bool busy = true;
     if (xSemaphoreTake(gctx.logger_control.mutex, 2)) {
         busy = gctx.logger_control.busy;
@@ -247,14 +262,14 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
         }
     } else {
         HANDLE(httpd_resp_send_chunk(req, R"--(<tr><td>Logger is BUSY!</td></tr>)--",
-                              HTTPD_RESP_USE_STRLEN));
+                                     HTTPD_RESP_USE_STRLEN));
     }
     HANDLE(httpd_resp_send_chunk(req, R"--(</table>
 
 
     <form id="form_simple" method="post" action=""></form>
 </body>)--",
-                          HTTPD_RESP_USE_STRLEN));
+                                 HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
@@ -338,6 +353,7 @@ static httpd_handle_t start_webserver(void) {
         ESP_LOGI(TAG, "Registering URI handlers");
         httpd_register_uri_handler(server, &root_get);
         httpd_register_uri_handler(server, &download_get);
+        httpd_register_uri_handler(server, &format_get);
         httpd_register_uri_handler(server, &root_post);
         return server;
     }
