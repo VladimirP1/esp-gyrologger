@@ -47,15 +47,30 @@ static void logger_task_cpp(void *params_pvoid) {
     Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0,
                   kBlockSize * 2);
 
-    int offset_gx{}, offset_gy{}, offset_gz{};
+    int cur_calibration_samples = 0;
+    const int kCalibrationSamples = 2000;
+    long offset_gx{}, offset_gy{}, offset_gz{};
     TickType_t prev_dump = xTaskGetTickCount();
     for (int i = 0;; ++i) {
         gyro_sample_message msg;
         xQueueReceive(gctx.gyro_interp_queue, &msg, portMAX_DELAY);
 
-        msg.gyro_x -= offset_gx;
-        msg.gyro_y -= offset_gy;
-        msg.gyro_z -= offset_gz;
+        if (cur_calibration_samples > 1) {
+            --cur_calibration_samples;
+            offset_gx += msg.gyro_x;
+            offset_gy += msg.gyro_y;
+            offset_gz += msg.gyro_z;
+        } else if (cur_calibration_samples == 1) {
+            offset_gx /= kCalibrationSamples;
+            offset_gy /= kCalibrationSamples;
+            offset_gz /= kCalibrationSamples;
+            cur_calibration_samples = 0;
+            ESP_LOGI(TAG, "Gyro calibrated %ld %ld %ld", offset_gx, offset_gy, offset_gz);
+        } else {
+            msg.gyro_x -= offset_gx;
+            msg.gyro_y -= offset_gy;
+            msg.gyro_z -= offset_gz;
+        }
 
         if (!integrator.update(msg)) {
             continue;
@@ -65,11 +80,10 @@ static void logger_task_cpp(void *params_pvoid) {
             if (gctx.logger_control.active) {
                 gctx.logger_control.busy = true;
                 if (gctx.logger_control.calibration_pending) {
-                    offset_gx = msg.gyro_x;
-                    offset_gy = msg.gyro_y;
-                    offset_gz = msg.gyro_z;
-                    ESP_LOGI(TAG, "Gyro calibrated");
+                    cur_calibration_samples = kCalibrationSamples + 1;
+                    offset_gx = offset_gy = offset_gz = 0;
                     gctx.logger_control.calibration_pending = false;
+                    ESP_LOGI(TAG, "Gyro calibration initiated");
                 }
                 gctx.logger_control.total_samples_written += kBlockSize;
                 xSemaphoreGive(gctx.logger_control.mutex);
