@@ -43,7 +43,7 @@ static char file_name_buf[30];
 static void logger_task_cpp(void *params_pvoid) {
     FILE *f = NULL;
 
-    BasicIntegrator integrator(kBlockSize, 6);
+    BasicIntegrator integrator(kBlockSize);
     Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0,
                   kBlockSize * 2);
 

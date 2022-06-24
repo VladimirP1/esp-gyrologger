@@ -50,7 +50,6 @@ static uint64_t smooth_update(ts_smooth_data* state, uint64_t rough_timestamp, b
 }
 
 void interpolator_task(void* params) {
-    const int sample_interval = 300;
     uint64_t current_time = 0;
     ts_smooth_data smooth_state;
     smooth_init(&smooth_state);
@@ -101,7 +100,7 @@ void interpolator_task(void* params) {
             a->flags &= ~GYRO_SAMPLE_NEW_ACCEL_DATA;
             b->flags &= ~GYRO_SAMPLE_NEW_ACCEL_DATA;
 
-            current_time += sample_interval;
+            current_time += gctx.gyro_interp_interval;
         }
     }
 }

@@ -141,6 +141,8 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 void gyro_lsm6_task(void* params) {
     gctx.gyro_raw_to_rads = (35e-3 * 3.141592 / 180.0);
     gctx.accel_raw_to_g = 0.488e-3;
+    gctx.gyro_interp_interval = 300;
+    gctx.gyro_decimate = 6;
 
     bool probe_success = false;
     static const uint8_t test_i2c_adrs[] = {0x6a, 0x6b};

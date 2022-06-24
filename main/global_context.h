@@ -16,6 +16,8 @@ typedef struct {
     QueueHandle_t gyro_interp_queue;
     double gyro_raw_to_rads;
     double accel_raw_to_g;
+    int gyro_interp_interval;
+    int gyro_decimate;
     volatile bool pause_polling;
     volatile bool continue_polling;
     struct {

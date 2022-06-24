@@ -97,7 +97,7 @@ struct quat {
     inline quat slerp(const quat &qq, base_type t) const;
     inline vec axis_angle() const;
 
-    base_type w{}, x{}, y{}, z{};
+    base_type w{1}, x{}, y{}, z{};
 };
 
 inline quat::quat() : w((int16_t)1), x(0), y(0), z(0) {}

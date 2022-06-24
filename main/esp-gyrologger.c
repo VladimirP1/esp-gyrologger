@@ -27,6 +27,8 @@
 static const char *TAG = "main";
 
 void app_main(void) {
+    wifi_init_softap();
+
     ESP_ERROR_CHECK(storage_fat_init());
 
     ESP_ERROR_CHECK(i2c_master_init());
@@ -35,11 +37,14 @@ void app_main(void) {
     gctx.gyro_raw_queue = xQueueCreate(GYRO_MAX_QUEUE_LENGTH, sizeof(gyro_sample_message));
     gctx.gyro_interp_queue = xQueueCreate(128, sizeof(gyro_sample_message));
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
+    gctx.gyro_decimate = 100;
+    gctx.gyro_interp_interval = 1000;
 
     xTaskCreate(interpolator_task, "interpolator", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     // xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
-    xTaskCreate(gyro_lsm6_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
+    // xTaskCreate(gyro_lsm6_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
+    xTaskCreate(gyro_bmi160_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
 
     xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
     
@@ -61,7 +66,6 @@ void app_main(void) {
     // #endif
     // register_logger_cmd();
 
-    wifi_init_softap();
 
     http_init();
 
