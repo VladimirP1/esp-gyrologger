@@ -15,7 +15,7 @@
 
 #include "global_context.h"
 
-static const char* TAG = "gyro_lsm6";
+static const char* TAG = "gyro_bmi160";
 
 #define REG_FIFO_LENGTH_0 0x22
 
@@ -51,15 +51,15 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
     time += 440;
 
-    // if (gctx.pause_polling) {
-    //     i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (0 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
-    //     gctx.pause_polling = false;
-    //     return false;
-    // } else if (gctx.continue_polling) {
-    //     i2c_register_write_byte(dev_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
-    //     gctx.continue_polling = false;
-    //     pipeline_reset = true;
-    // }
+    if (gctx.pause_polling) {
+        i2c_register_write_byte(dev_adr, REG_FIFO_CONFIG_1, 0);
+        gctx.pause_polling = false;
+        return false;
+    } else if (gctx.continue_polling) {
+        i2c_register_write_byte(dev_adr, REG_FIFO_CONFIG_1, 0b11010000);
+        gctx.continue_polling = false;
+        pipeline_reset = true;
+    }
 
     i2c_register_read(dev_adr, REG_FIFO_DATA, tmp_data, 1);
     uint8_t fh_mode = tmp_data[0] >> 6;
@@ -101,8 +101,8 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     } else if (fh_mode == 1) {  // control frame
         if (fh_parm == 0) {     // skip
             i2c_register_read(dev_adr, REG_FIFO_DATA, tmp_data, 2);
-            // while (1)
-            // ;
+            while (1)
+            ;
         } else if (fh_parm == 1) {  // sensortime
                                     // TODO
             while (1)

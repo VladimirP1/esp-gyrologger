@@ -46,7 +46,7 @@ void app_main(void) {
     // xTaskCreate(gyro_lsm6_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     xTaskCreate(gyro_bmi160_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
 
-    xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
+    // xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
     
 
     // Console init

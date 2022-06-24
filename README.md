@@ -1,6 +1,9 @@
 ### What is this?
 This is a GyroFlow-compatible data logger firmware for the esp32 and esp32-c3 microcontrollers (and probably others supported by esp-idf).
 
+### Warning
+This is in alpha-stage
+
 ### Supported IMUs
 The following IMUs can be used over the i2c bus:
 * MPU-6050 / MPU-6000

@@ -31,7 +31,7 @@ static inline void SCL(bool x) {
 }
 
 #define HCLK()                    \
-    for (int i = 0; i < 1; i++) { \
+    for (int i = 0; i < 10; i++) { \
         __asm__("nop");           \
     };
 
