@@ -118,12 +118,8 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
-        static constexpr quat::base_type kGyroToRads64 =
-            quat::base_type{1.0 / 32.8 * 3.141592 / 180.0 / 64.0};
-        static constexpr quat::base_type kAccelToG16 = quat::base_type{16.0 / 32767 / 16.0};
-        quat::vec gyro_vec{kGyroToRads64 * gyro[0], kGyroToRads64 * gyro[1], kGyroToRads64 * gyro[2]};
-        quat::vec accel_vec{kAccelToG16 * accel[0], kAccelToG16 * accel[1], kAccelToG16 * accel[2]};
-        gctx.gyro_ring.Push((time - prev_gyro_time) * 1000, gyro_vec, accel_vec, have_accel ? kFlagHaveAccel : 0);
+        gctx.gyro_ring.Push((time - prev_gyro_time) * 1000, gyro[0], gyro[1], gyro[2], accel[0],
+                            accel[1], accel[2], have_accel ? kFlagHaveAccel : 0);
         have_gyro = false;
         have_accel = false;
         pipeline_reset = false;
@@ -134,9 +130,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 }
 
 extern "C" {
-static bool IRAM_ATTR gyro_timer_cb_c(void* args) {
-    return gyro_timer_cb(args);
-}
+static bool IRAM_ATTR gyro_timer_cb_c(void* args) { return gyro_timer_cb(args); }
 }
 
 void gyro_bmi160_task(void* params) {

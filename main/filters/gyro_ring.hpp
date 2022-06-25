@@ -13,8 +13,8 @@ extern "C" {
 #include <vector>
 
 struct raw_sample {
-    quat::vec gyro;
-    quat::vec acc;
+    int gx, gy, gz;
+    int ax, ay, az;
     int flags;
 };
 
@@ -60,15 +60,13 @@ class GyroRing {
         ESP_LOGI(kLogTag, "inv_interval %f", (double)inv_desired_interval_);
     }
 
-    void Push(uint32_t dur_ns, quat::vec gyro, quat::vec accel, int flags) {
+    void Push(uint32_t dur_ns, int gx, int gy, int gz, int ax, int ay, int az, int flags) {
         static int shadow_wptr{};
-        raw_sample rs;
-        rs.acc = accel;
-        rs.gyro = gyro;
-        rs.flags = flags;
 
         auto &s = ring_[shadow_wptr];
         s.duration_ns = dur_smoother.Smooth(dur_ns);
+        raw_sample rs = {
+            .gx = gx, .gy = gy, .gz = gz, .ax = ax, .ay = ay, .az = az, .flags = flags};
         s.sample = rs;
 
         shadow_wptr = (shadow_wptr + 1) % ring_.size();
@@ -94,9 +92,15 @@ class GyroRing {
         while (rptr_ != cached_wptr) {
             auto &s = ring_[rptr_];
             auto &rs = std::get<raw_sample>(s.sample);
-            quat_rptr_ =
-                quat_rptr_ * quat::quat{rs.gyro * quat::base_type{s.duration_ns * 64.0 / 1e9}};
-            MaybeNormalize(quat_rptr_);
+
+            // static constexpr quat::base_type kAccelToG16 = quat::base_type{16.0 / 32767 / 16.0};
+            // rs.acc = quat::vec{kAccelToG16 * ax, kAccelToG16 * ay, kAccelToG16 * az};
+            static constexpr float kGyroToRads = 1.0 / 32.8 * 3.141592 / 180.0;
+            float gscale = kGyroToRads * s.duration_ns / 1e9;
+            auto gyro = quat::vec{quat::base_type{gscale * rs.gx}, quat::base_type{gscale * rs.gy},
+                                  quat::base_type{gscale * rs.gz}};
+            quat_rptr_ = (quat_rptr_ * quat::quat{gyro}).normalized();
+            // MaybeNormalize(quat_rptr_);
 
             s.sample = quat_rptr_;
 
@@ -123,7 +127,7 @@ class GyroRing {
             {  // advance sptr while we can
                 while (samples_buffered) {
                     int next_sptr = (sptr_ + 1) % ring_.size();
-                    uint32_t next_sptr_ts = sptr_ts_ + ring_[next_sptr].duration_ns / 1000;
+                    uint32_t next_sptr_ts = sptr_ts_ + ring_[next_sptr].duration_ns;
                     if (next_sptr_ts < interp_ts_) {
                         sptr_ = next_sptr;
                         sptr_ts_ = next_sptr_ts;
@@ -135,7 +139,7 @@ class GyroRing {
                 if (!samples_buffered) break;
             }
             {  // wrap the timestamps if needed
-                static constexpr uint32_t kTsWrapInterval = 2000000;
+                static constexpr uint32_t kTsWrapInterval = 200000000;
                 if (interp_ts_ >= 2 * kTsWrapInterval) {
                     interp_ts_ -= kTsWrapInterval;
                     sptr_ts_ -= kTsWrapInterval;
@@ -149,28 +153,28 @@ class GyroRing {
 
                 int dbg_cnt{};
                 int cached_sptr = (sptr_ + 1) % ring_.size();
-                int cached_sptr_ts = sptr_ts_ + ring_[cached_sptr].duration_ns / 1000;
+                int cached_sptr_ts = sptr_ts_ + ring_[cached_sptr].duration_ns;
                 // to the right
-                while ((k = Kernel(cached_sptr_ts - interp_ts_)) != quat::base_type{}) {
+                while ((k = Kernel((cached_sptr_ts - interp_ts_) / 1000)) != quat::base_type{}) {
                     q += std::get<quat::quat>(ring_[cached_sptr].sample) * k;
                     k_sum += k;
                     cached_sptr = (cached_sptr + 1) % ring_.size();
-                    cached_sptr_ts += ring_[cached_sptr].duration_ns / 1000;
+                    cached_sptr_ts += ring_[cached_sptr].duration_ns;
                     if (!ring_[cached_sptr].duration_ns) break;
                     ++dbg_cnt;
                 }
                 // to the left
                 cached_sptr = sptr_;
                 cached_sptr_ts = sptr_ts_;
-                while ((k = Kernel(interp_ts_ - cached_sptr_ts)) != quat::base_type{}) {
+                while ((k = Kernel((interp_ts_ - cached_sptr_ts) / 1000)) != quat::base_type{}) {
                     q += std::get<quat::quat>(ring_[cached_sptr].sample) * k;
                     k_sum += k;
                     if (!ring_[cached_sptr].duration_ns) break;
-                    cached_sptr_ts -= ring_[cached_sptr].duration_ns / 1000;
+                    cached_sptr_ts -= ring_[cached_sptr].duration_ns;
                     cached_sptr = (cached_sptr + ring_.size() - 1) % ring_.size();
                     ++dbg_cnt;
                 }
-                interp_ts_ += desired_interval_;
+                interp_ts_ += desired_interval_ * 1000;
 
                 static uint8_t xx{};
                 if (!++xx) {
@@ -219,7 +223,7 @@ class GyroRing {
 
     int chunk_size_;
     std::vector<sample> ring_;
-    DurationSmoother dur_smoother{16000};
+    DurationSmoother dur_smoother{1000};
 
     uint32_t desired_interval_;
     quat::base_type inv_desired_interval_;
