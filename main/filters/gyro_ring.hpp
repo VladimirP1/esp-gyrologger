@@ -147,7 +147,7 @@ class GyroRing {
                 }
             }
             {  // Interpolate
-                quat::quat q{};
+                quat::quat q{{},{},{},{}};
                 quat::base_type k{};
                 quat::base_type k_sum{};
 
@@ -180,7 +180,6 @@ class GyroRing {
                 if (!++xx) {
                     ESP_LOGI(kLogTag, "rg %d %u", dbg_cnt, ring_[cached_sptr].duration_ns);
                 }
-
                 if (k_sum != quat::base_type{}) {
                     q.w /= k_sum;
                     q.x /= k_sum;
