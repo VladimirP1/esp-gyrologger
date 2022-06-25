@@ -2,10 +2,9 @@
 
 #pragma once
 
-extern "C" {
-#include "gyro/gyro_types.h"
-#include "global_context.h"
-}
+#include "gyro/gyro_types.hpp"
+#include "global_context.hpp"
+
 #include "lib/fixquat.hpp"
 
 #include <vector>

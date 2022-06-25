@@ -1,4 +1,15 @@
 idf_component_register(
-    SRCS "esp-gyrologger.c" "gyro/gyro_mpu6050.c" "gyro/gyro_lsm6.c" "gyro/gyro_bmi160.c" "bus/bus_i2c.c" "storage/storage_fat.c" "logger/logger.cpp" "compression/interpolate.c" "wifi/wifi.c" "wifi/http.cpp" "misc/misc.c" "global_context.c"
+    SRCS 
+        "esp-gyrologger.cpp" 
+        "global_context.cpp"
+        "gyro/gyro_bmi160.cpp" 
+        # "gyro/gyro_lsm6.cpp" 
+        # "gyro/gyro_mpu6050.cpp" 
+        "logger/logger.cpp" 
+        "wifi/http.cpp" 
+        "bus/bus_i2c.c" 
+        # "misc/misc.c" 
+        "storage/storage_fat.c" 
+        "wifi/wifi.c" 
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")

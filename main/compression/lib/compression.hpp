@@ -155,7 +155,7 @@ class Coder {
                 quat::vec decoded_update = upd_enc.encode_update(v_update);
 
                 state.v += decoded_update;
-                state.q = (state.q * state.v).normalized();
+                state.q = (state.q * quat::quat{state.v}).normalized();
 
                 max_angle_error_rad =
                     std::max((state.q.conj() * q).axis_angle().norm(), max_angle_error_rad);
@@ -252,7 +252,7 @@ class Coder {
             state.v += dequant_update(upd, scale);
 
             if (!upd.is_saturated()) {
-                state.q = (state.q * state.v).normalized();
+                state.q = (state.q * quat::quat{state.v}).normalized();
                 quats.push_back(state.q);
             }
             // std::cout << "pos = " << decode_ptr - compressed_data << std::endl;

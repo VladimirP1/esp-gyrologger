@@ -1,8 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "logger.hpp"
 extern "C" {
-#include "logger.h"
-
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/queue.h>
@@ -10,18 +9,16 @@ extern "C" {
 #include <esp_log.h>
 #include <esp_console.h>
 #include <argtable3/argtable3.h>
-
-#include "gyro/gyro_types.h"
-
-#include <string.h>
 }
+
+#include <cstring>
 
 #include <fstream>
 
 #include "compression/lib/compression.hpp"
-#include "compression/integration.hpp"
+#include "filters/gyro_ring.hpp"
 
-#include "global_context.h"
+#include "global_context.hpp"
 
 #define TAG "logger"
 
@@ -40,51 +37,27 @@ static esp_err_t find_good_filename(char *buf) {
 }
 
 static char file_name_buf[30];
-static void logger_task_cpp(void *params_pvoid) {
+void logger_task(void *params_pvoid) {
     FILE *f = NULL;
 
-    BasicIntegrator integrator(kBlockSize);
     Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0,
                   kBlockSize * 2);
 
-    int cur_calibration_samples = 0;
-    const int kCalibrationSamples = 2000;
-    long offset_gx{}, offset_gy{}, offset_gz{};
     TickType_t prev_dump = xTaskGetTickCount();
     for (int i = 0;; ++i) {
-        gyro_sample_message msg;
-        xQueueReceive(gctx.gyro_interp_queue, &msg, portMAX_DELAY);
-
-        if (cur_calibration_samples > 1) {
-            --cur_calibration_samples;
-            offset_gx += msg.gyro_x;
-            offset_gy += msg.gyro_y;
-            offset_gz += msg.gyro_z;
-        } else if (cur_calibration_samples == 1) {
-            offset_gx /= kCalibrationSamples;
-            offset_gy /= kCalibrationSamples;
-            offset_gz /= kCalibrationSamples;
-            cur_calibration_samples = 0;
-            ESP_LOGI(TAG, "Gyro calibrated %ld %ld %ld", offset_gx, offset_gy, offset_gz);
-        } else {
-            msg.gyro_x -= offset_gx;
-            msg.gyro_y -= offset_gy;
-            msg.gyro_z -= offset_gz;
-        }
-
-        if (!integrator.update(msg)) {
+        quat::quat *quat_block = gctx.gyro_ring.Work();
+        if (!quat_block) {
+            vTaskDelay(1);
             continue;
         }
 
         if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
             if (gctx.logger_control.active) {
                 gctx.logger_control.busy = true;
-                if (gctx.logger_control.calibration_pending) {
-                    cur_calibration_samples = kCalibrationSamples + 1;
-                    offset_gx = offset_gy = offset_gz = 0;
-                    gctx.logger_control.calibration_pending = false;
-                    ESP_LOGI(TAG, "Gyro calibration initiated");
-                }
+                // if (gctx.logger_control.calibration_pending) {
+                //     gctx.logger_control.calibration_pending = false;
+                //     ESP_LOGI(TAG, "Gyro calibration initiated");
+                // }
                 gctx.logger_control.total_samples_written += kBlockSize;
                 xSemaphoreGive(gctx.logger_control.mutex);
 
@@ -109,9 +82,7 @@ static void logger_task_cpp(void *params_pvoid) {
                     }
                 }
 
-                ESP_LOGI(TAG, "interval = %u", msg.smpl_interval_ns);
-
-                auto tmp = encoder.encode_block(integrator.quats.data());
+                auto tmp = encoder.encode_block(quat_block);
 
                 auto &bytes_to_write = tmp.first;
                 auto &max_error_rad = tmp.second;
@@ -133,7 +104,7 @@ static void logger_task_cpp(void *params_pvoid) {
                 auto cur_dump = xTaskGetTickCount();
                 double elapsed = (xTaskGetTickCount() - prev_dump) * 1.0 / configTICK_RATE_HZ;
                 prev_dump = cur_dump;
-                ESP_LOGI(TAG, "%d bytes, logger capacity at this rate = %.2f h, max_error = %.4f",
+                ESP_LOGI(TAG, "%d bytes, logger capacity at this rate = %.2f h, max_error = % .4f ",
                          (int)out_buf_size, 3000000 / (out_buf_size / elapsed) / 60 / 60,
                          float(max_error_rad) * 180 / M_PI);
 
@@ -164,8 +135,6 @@ static void logger_task_cpp(void *params_pvoid) {
             f = NULL;
             taskYIELD();
         }
-
-        integrator.clear();
     }
 }
 
@@ -226,12 +195,8 @@ static int do_logger_cmd(int argc, char **argv) {
     return 1;
 }
 
-extern "C" {
-void logger_task(void *params_pvoid) { logger_task_cpp(params_pvoid); }
-
 void register_logger_cmd() {
     const esp_console_cmd_t cmd = {
         .command = "logger", .help = NULL, .hint = NULL, .func = &do_logger_cmd, .argtable = NULL};
     ESP_ERROR_CHECK(esp_console_cmd_register(&cmd));
-}
 }

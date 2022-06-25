@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include <stdio.h>
-#include <driver/i2c.h>
+extern "C" {
+#include "bus/bus_i2c.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -11,22 +11,23 @@
 #include <esp_console.h>
 #include <nvs_flash.h>
 
-#include "bus/bus_i2c.h"
-#include "gyro/gyro.h"
-#include "storage/storage_fat.h"
-#include "logger/logger.h"
-#include "wifi/wifi.h"
-#include "wifi/http.h"
-#include "compression/interpolate.h"
-#include "misc/misc.h"
-
-#include "global_context.h"
-
 #include <string.h>
+#include <stdio.h>
+
+#include "storage/storage_fat.h"
+#include "wifi/wifi.h"
+#include "misc/misc.h"
+}
+
+#include "wifi/http.hpp"
+#include "gyro/gyro.hpp"
+#include "logger/logger.hpp"
+
+#include "global_context.hpp"
 
 static const char *TAG = "main";
 
-void app_main(void) {
+void app_main_cpp(void) {
     wifi_init_softap();
 
     ESP_ERROR_CHECK(storage_fat_init());
@@ -34,20 +35,17 @@ void app_main(void) {
     ESP_ERROR_CHECK(i2c_master_init());
     ESP_LOGI(TAG, "I2C initialized successfully");
 
-    gctx.gyro_raw_queue = xQueueCreate(GYRO_MAX_QUEUE_LENGTH, sizeof(gyro_sample_message));
-    gctx.gyro_interp_queue = xQueueCreate(128, sizeof(gyro_sample_message));
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
-    gctx.gyro_decimate = 100;
-    gctx.gyro_interp_interval = 1000;
+    gctx.gyro_ring.Init(2048, kBlockSize, 1800);
 
-    xTaskCreate(interpolator_task, "interpolator", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     // xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     // xTaskCreate(gyro_lsm6_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
     xTaskCreate(gyro_bmi160_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
 
     // xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
-    
+
+    http_init();
 
     // Console init
     //     esp_console_repl_t *repl = NULL;
@@ -67,7 +65,9 @@ void app_main(void) {
     // register_logger_cmd();
 
 
-    http_init();
-
     // ESP_ERROR_CHECK(esp_console_start_repl(repl));
+}
+
+extern "C" {
+void app_main(void) { app_main_cpp(); }
 }

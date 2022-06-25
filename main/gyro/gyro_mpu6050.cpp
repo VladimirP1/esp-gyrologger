@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "gyro_mpu6050.h"
-#include "gyro_types.h"
+#include "gyro_mpu6050.hpp"
+#include "gyro_types.hpp"
 
+extern "C" {
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -12,8 +13,9 @@
 #include <driver/timer.h>
 
 #include "bus/bus_i2c.h"
+}
 
-#include "global_context.h"
+#include "global_context.hpp"
 
 static const char *TAG = "gyro_mpu";
 
@@ -91,12 +93,12 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
     if (fifo_bytes > 0) {
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
         gyro_sample_message msg = {.timestamp = time,
-                                   .accel_x = (int16_t)((tmp_data[0] << 8) | tmp_data[1]),
-                                   .accel_y = (int16_t)((tmp_data[2] << 8) | tmp_data[3]),
-                                   .accel_z = (int16_t)((tmp_data[4] << 8) | tmp_data[5]),
                                    .gyro_x = (int16_t)((tmp_data[6] << 8) | tmp_data[7]),
                                    .gyro_y = (int16_t)((tmp_data[8] << 8) | tmp_data[9]),
                                    .gyro_z = (int16_t)((tmp_data[10] << 8) | tmp_data[11]),
+                                   .accel_x = (int16_t)((tmp_data[0] << 8) | tmp_data[1]),
+                                   .accel_y = (int16_t)((tmp_data[2] << 8) | tmp_data[3]),
+                                   .accel_z = (int16_t)((tmp_data[4] << 8) | tmp_data[5]),
                                    .smpl_interval_ns = 0,
                                    .flags = GYRO_SAMPLE_NEW_ACCEL_DATA};
         // if ((time % 1000000) < 500000) {
@@ -112,7 +114,8 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
     }
 
     if (fifo_bytes > 900) {
-        while(1);
+        while (1)
+            ;
     }
     time += 900;
     return high_task_awoken;
@@ -160,11 +163,11 @@ void gyro_mpu6050_task(void *params_pvoid) {
         i2c_register_write_byte(DEV_ADDR, REG_USER_CONTROL, REG_USER_CONTROL_MASK_FIFO_EN));
 
     timer_config_t config = {
-        .divider = TIMER_DIVIDER,
-        .counter_dir = TIMER_COUNT_UP,
-        .counter_en = TIMER_PAUSE,
         .alarm_en = TIMER_ALARM_EN,
-        .auto_reload = true,
+        .counter_en = TIMER_PAUSE,
+        .counter_dir = TIMER_COUNT_UP,
+        .auto_reload = TIMER_AUTORELOAD_EN,
+        .divider = TIMER_DIVIDER,
     };
     timer_init(TIMER_GROUP_0, TIMER_0, &config);
 

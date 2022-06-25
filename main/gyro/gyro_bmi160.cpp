@@ -1,8 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "gyro_bmi160.h"
-#include "gyro_types.h"
+#include "gyro_bmi160.hpp"
 
+extern "C" {
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -12,8 +12,10 @@
 #include <driver/timer.h>
 
 #include "bus/bus_i2c.h"
+}
 
-#include "global_context.h"
+#include "filters/gyro_ring.hpp"
+#include "global_context.hpp"
 
 static const char* TAG = "gyro_bmi160";
 
@@ -45,11 +47,10 @@ static uint8_t dev_adr = 0x69;
 static bool IRAM_ATTR gyro_timer_cb(void* args) {
     static uint8_t tmp_data[1024];
     static uint64_t time = 0;
+    static uint64_t prev_gyro_time = 0;
     static int16_t gyro[3] = {0, 0, 0};
     static int16_t accel[3] = {0, 0, 0};
     static bool have_gyro = false, have_accel = false, pipeline_reset = false;
-
-    time += 440;
 
     if (gctx.pause_polling) {
         i2c_register_write_byte(dev_adr, REG_FIFO_CONFIG_1, 0);
@@ -65,6 +66,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     uint8_t fh_mode = tmp_data[0] >> 6;
     uint8_t fh_parm = (tmp_data[0] >> 2) & 0x0f;
     if (tmp_data[0] == 0x80) {  // invalid / empty frame
+        time += 440;
         return false;
     } else if (fh_mode == 2) {  // regular frame
         int bytes_to_read = 1;
@@ -102,7 +104,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
         if (fh_parm == 0) {     // skip
             i2c_register_read(dev_adr, REG_FIFO_DATA, tmp_data, 2);
             while (1)
-            ;
+                ;
         } else if (fh_parm == 1) {  // sensortime
                                     // TODO
             while (1)
@@ -116,33 +118,32 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
-        gyro_sample_message msg = {.timestamp = time,
-                                   .accel_x = accel[0],
-                                   .accel_y = accel[1],
-                                   .accel_z = accel[2],
-                                   .gyro_x = gyro[0],
-                                   .gyro_y = gyro[1],
-                                   .gyro_z = gyro[2],
-                                   .smpl_interval_ns = tmp_data[0],
-                                   .flags = (have_accel ? GYRO_SAMPLE_NEW_ACCEL_DATA : 0) |
-                                            (pipeline_reset ? GYRO_SAMPLE_PIPELINE_RESET : 0)};
+        static constexpr quat::base_type kGyroToRads64 =
+            quat::base_type{1.0 / 32.8 * 3.141592 / 180.0 / 64.0};
+        static constexpr quat::base_type kAccelToG16 = quat::base_type{16.0 / 32767 / 16.0};
+        quat::vec gyro_vec{kGyroToRads64 * gyro[0], kGyroToRads64 * gyro[1], kGyroToRads64 * gyro[2]};
+        quat::vec accel_vec{kAccelToG16 * accel[0], kAccelToG16 * accel[1], kAccelToG16 * accel[2]};
+        gctx.gyro_ring.Push((time - prev_gyro_time) * 1000, gyro_vec, accel_vec, have_accel ? kFlagHaveAccel : 0);
         have_gyro = false;
         have_accel = false;
         pipeline_reset = false;
-        if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
-            errQUEUE_FULL) {
-            while (1)
-                ;
-        }
+        prev_gyro_time = time;
     }
+    time += 440;
     return high_task_awoken;
 }
 
+extern "C" {
+static bool IRAM_ATTR gyro_timer_cb_c(void* args) {
+    return gyro_timer_cb(args);
+}
+}
+
 void gyro_bmi160_task(void* params) {
-    gctx.gyro_raw_to_rads = (1.0 / 32.8 * 3.141592 / 180.0);
-    gctx.accel_raw_to_g = (16.0 / 32767);
-    gctx.gyro_interp_interval = 600;
-    gctx.gyro_decimate = 3;
+    // gctx.gyro_raw_to_rads = (1.0 / 32.8 * 3.141592 / 180.0);
+    // gctx.accel_raw_to_g = (16.0 / 32767);
+    // gctx.gyro_interp_interval = 600;
+    // gctx.gyro_decimate = 3;
     static uint8_t data[2];
     i2c_register_read(dev_adr, 0x00, data, 1);
     ESP_LOGI(TAG, "WHO_AM_I @ 0x%02X = 0x%02X", dev_adr, data[0]);
@@ -233,11 +234,11 @@ void gyro_bmi160_task(void* params) {
     // }
 
     timer_config_t config = {
-        .divider = TIMER_DIVIDER,
-        .counter_dir = TIMER_COUNT_UP,
-        .counter_en = TIMER_PAUSE,
         .alarm_en = TIMER_ALARM_EN,
-        .auto_reload = true,
+        .counter_en = TIMER_PAUSE,
+        .counter_dir = TIMER_COUNT_UP,
+        .auto_reload = TIMER_AUTORELOAD_EN,
+        .divider = TIMER_DIVIDER,
     };
     timer_init(TIMER_GROUP_0, TIMER_0, &config);
 
@@ -246,7 +247,7 @@ void gyro_bmi160_task(void* params) {
     timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, .44e-3 * TIMER_SCALE);
     timer_enable_intr(TIMER_GROUP_0, TIMER_0);
 
-    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb, NULL, ESP_INTR_FLAG_IRAM);
+    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb_c, NULL, ESP_INTR_FLAG_IRAM);
 
     timer_start(TIMER_GROUP_0, TIMER_0);
 

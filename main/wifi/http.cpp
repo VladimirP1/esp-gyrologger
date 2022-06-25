@@ -1,21 +1,19 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-extern "C" {
-#include "http.h"
+#include "http.hpp"
 
+extern "C" {
 #include <esp_http_server.h>
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_partition.h>
-
-#include <stdio.h>
-
-#include "global_context.h"
+#include <ff.h>
 }
+#include <cstdio>
+
+#include "global_context.hpp"
 
 #include "compression/lib/compression.hpp"
-
-#include <ff.h>
 
 #include <string>
 
@@ -28,13 +26,19 @@ static const char* TAG = "http-server";
         return ESP_FAIL; \
     }
 
+#define HANDLE_FINALLY(x, y) \
+    if ((x) != ESP_OK) {     \
+        return ESP_FAIL;     \
+        y;                   \
+    }
+
 static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     static uint8_t buf2[2000];
     static char buf_text[4096];
 
     gctx.pause_polling = true;
 
-    const double sample_rate = 8000.0 / 14;
+    const double sample_rate = 1.0 / 0.00180;
     const double gscale = 1 / 0.00053263221;
 
     HANDLE(httpd_resp_send_chunk(req, R"--(GYROFLOW IMU LOG
@@ -91,10 +95,9 @@ t,gx,gy,gz,ax,ay,ax
             time++;
 
             if (wptr - buf_text > 3200) {
-                if (httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN) != ESP_OK) {
-                    fclose(f);
-                    return ESP_FAIL;
-                }
+                HANDLE_FINALLY(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN),
+                               fclose(f);
+                               gctx.continue_polling = true);
                 wptr = buf_text;
             }
         }
@@ -108,10 +111,11 @@ t,gx,gy,gz,ax,ay,ax
     fclose(f);
 
     if (wptr != buf_text) {
-        HANDLE(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN));
+        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN),
+                       gctx.continue_polling = true);
     }
 
-    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
+    HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), gctx.continue_polling = true);
 
     gctx.continue_polling = true;
 
@@ -364,10 +368,8 @@ static httpd_handle_t start_webserver(void) {
 
 static esp_err_t stop_webserver(httpd_handle_t server) { return httpd_stop(server); }
 
-extern "C" {
 void http_init() {
     static httpd_handle_t server = NULL;
 
     server = start_webserver();
-}
 }

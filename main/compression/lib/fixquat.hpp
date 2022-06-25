@@ -85,10 +85,13 @@ inline vec vec::normalized() const {
 struct quat {
     inline quat();
     inline quat(base_type w, base_type x, base_type y, base_type z);
-    inline quat(const vec &aa);
+    explicit inline quat(const vec &aa);
+    inline quat(const quat &q);
 
+    inline quat &operator+=(const quat &b);
     inline quat &operator*=(const quat &b);
     inline quat operator*(const quat &b) const;
+    inline quat operator*(base_type b) const;
 
     inline quat conj() const;
     inline base_type norm() const;
@@ -117,6 +120,8 @@ inline quat::quat(const vec &aa) {
     }
 }
 
+inline quat::quat(const quat &q) : w(q.w), x(q.x), y(q.y), z(q.z) {}
+
 inline vec quat::axis_angle() const {
     const base_type sin_squared_theta = x * x + y * y + z * z;
 
@@ -131,6 +136,14 @@ inline vec quat::axis_angle() const {
     return {x * k, y * k, z * k};
 }
 
+inline quat &quat::operator+=(const quat &q) {
+    w += q.w;
+    x += q.x;
+    y += q.y;
+    z += q.z;
+    return *this;
+}
+
 inline quat &quat::operator*=(const quat &q) {
     *this = {w * q.w - x * q.x - y * q.y - z * q.z, w * q.x + x * q.w + y * q.z - z * q.y,
              w * q.y - x * q.z + y * q.w + z * q.x, w * q.z + x * q.y - y * q.x + z * q.w};
@@ -142,6 +155,8 @@ inline quat quat::operator*(const quat &q) const {
     ret *= q;
     return ret;
 }
+
+inline quat quat::operator*(base_type b) const { return {w * b, x * b, y * b, z * b}; }
 
 inline quat quat::conj() const {
     const quat &q = *this;

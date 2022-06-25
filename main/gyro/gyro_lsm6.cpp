@@ -1,8 +1,9 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
-#include "gyro_lsm6.h"
-#include "gyro_types.h"
+#include "gyro_lsm6.hpp"
+#include "gyro_types.hpp"
 
+extern "C" {
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
@@ -12,8 +13,9 @@
 #include <driver/timer.h>
 
 #include "bus/bus_i2c.h"
+}
 
-#include "global_context.h"
+#include "global_context.hpp"
 
 static const char* TAG = "gyro_lsm6";
 
@@ -116,12 +118,12 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
         gyro_sample_message msg = {.timestamp = time,
-                                   .accel_x = accel[0],
-                                   .accel_y = accel[1],
-                                   .accel_z = accel[2],
                                    .gyro_x = gyro[0],
                                    .gyro_y = gyro[1],
                                    .gyro_z = gyro[2],
+                                   .accel_x = accel[0],
+                                   .accel_y = accel[1],
+                                   .accel_z = accel[2],
                                    .smpl_interval_ns = 0,
                                    .flags = (have_accel ? GYRO_SAMPLE_NEW_ACCEL_DATA : 0) |
                                             (pipeline_reset ? GYRO_SAMPLE_PIPELINE_RESET : 0)};
@@ -182,11 +184,11 @@ void gyro_lsm6_task(void* params) {
     // clang-format on
 
     timer_config_t config = {
-        .divider = TIMER_DIVIDER,
-        .counter_dir = TIMER_COUNT_UP,
-        .counter_en = TIMER_PAUSE,
         .alarm_en = TIMER_ALARM_EN,
-        .auto_reload = true,
+        .counter_en = TIMER_PAUSE,
+        .counter_dir = TIMER_COUNT_UP,
+        .auto_reload = TIMER_AUTORELOAD_EN,
+        .divider = TIMER_DIVIDER,
     };
     timer_init(TIMER_GROUP_0, TIMER_0, &config);
 
