@@ -12,6 +12,8 @@ extern "C" {
 #include <variant>
 #include <vector>
 
+static constexpr float kGyroToRads = 1.0 / 32.8 * 3.141592 / 180.0;
+static constexpr float kAccelToG = 16.0 / 32767;
 struct raw_sample {
     int gx, gy, gz;
     int ax, ay, az;
@@ -93,14 +95,11 @@ class GyroRing {
             auto &s = ring_[rptr_];
             auto &rs = std::get<raw_sample>(s.sample);
 
-            // static constexpr quat::base_type kAccelToG16 = quat::base_type{16.0 / 32767 / 16.0};
-            // rs.acc = quat::vec{kAccelToG16 * ax, kAccelToG16 * ay, kAccelToG16 * az};
-            static constexpr float kGyroToRads = 1.0 / 32.8 * 3.141592 / 180.0;
             float gscale = kGyroToRads * s.duration_ns / 1e9;
             auto gyro = quat::vec{quat::base_type{gscale * rs.gx}, quat::base_type{gscale * rs.gy},
                                   quat::base_type{gscale * rs.gz}};
-            quat_rptr_ = (quat_rptr_ * quat::quat{gyro}).normalized();
-            // MaybeNormalize(quat_rptr_);
+            quat_rptr_ = (quat_rptr_ * quat::quat{gyro});
+            MaybeNormalize(quat_rptr_);
 
             s.sample = quat_rptr_;
 
@@ -147,7 +146,7 @@ class GyroRing {
                 }
             }
             {  // Interpolate
-                quat::quat q{{},{},{},{}};
+                quat::quat q{{}, {}, {}, {}};
                 quat::base_type k{};
                 quat::base_type k_sum{};
 
@@ -199,7 +198,7 @@ class GyroRing {
    private:
     void MaybeNormalize(quat::quat &q) {
         static uint8_t x = 0;
-        if (!++x) q = q.normalized();
+        if ((++x % 16) == 0) q = q.normalized();
     }
 
     static quat::base_type sinc(quat::base_type x) {
