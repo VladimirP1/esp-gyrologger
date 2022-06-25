@@ -66,8 +66,6 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     uint8_t fh_mode = tmp_data[0] >> 6;
     uint8_t fh_parm = (tmp_data[0] >> 2) & 0x0f;
     if (tmp_data[0] == 0x80) {  // invalid / empty frame
-        time += 440;
-        return false;
     } else if (fh_mode == 2) {  // regular frame
         int bytes_to_read = 1;
         if (fh_parm & 4) {  // have mag
@@ -149,13 +147,6 @@ void gyro_bmi160_task(void* params) {
 
     i2c_register_write_byte(dev_adr, REG_CMD, 0xb0);  // fifo reset
 
-    vTaskDelay(100);
-
-    i2c_register_write_byte(dev_adr, REG_ACC_CONF, 0b00101000);
-    i2c_register_write_byte(dev_adr, REG_ACC_RANGE, 0b1100);
-    i2c_register_write_byte(dev_adr, REG_GYR_CONF, 0b00101100);
-    i2c_register_write_byte(dev_adr, REG_GYR_RANGE, 1);
-
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
     i2c_register_write_byte(dev_adr, REG_CMD, 0b00010001);  // start accel
@@ -165,6 +156,8 @@ void gyro_bmi160_task(void* params) {
 
     i2c_register_write_byte(dev_adr, REG_ACC_RANGE, 0b1100);
     i2c_register_write_byte(dev_adr, REG_GYR_RANGE, 1);
+    i2c_register_write_byte(dev_adr, REG_ACC_CONF, 0b00101000);
+    i2c_register_write_byte(dev_adr, REG_GYR_CONF, 0b00101100);
 
     i2c_register_write_byte(dev_adr, REG_FIFO_CONFIG_0, 0);
     i2c_register_write_byte(dev_adr, REG_FIFO_CONFIG_1, 0b11010000);
