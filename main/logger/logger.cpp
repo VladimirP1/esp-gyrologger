@@ -45,7 +45,7 @@ void logger_task(void *params_pvoid) {
 
     TickType_t prev_dump = xTaskGetTickCount();
     for (int i = 0;; ++i) {
-        quat::quat *quat_block = gctx.gyro_ring.Work();
+        quat::quat *quat_block = gctx.gyro_ring->Work();
         if (!quat_block) {
             vTaskDelay(1);
             continue;

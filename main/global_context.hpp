@@ -2,8 +2,6 @@
 
 #pragma once
 
-#include "filters/gyro_ring.hpp"
-
 extern "C" {
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -13,8 +11,9 @@ extern "C" {
 
 #define kBlockSize 256
 
+class GyroRing;
 typedef struct {
-    GyroRing gyro_ring;
+    GyroRing* gyro_ring;
 
     volatile bool pause_polling;
     volatile bool continue_polling;

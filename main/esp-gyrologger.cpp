@@ -22,6 +22,7 @@ extern "C" {
 #include "wifi/http.hpp"
 #include "gyro/gyro.hpp"
 #include "logger/logger.hpp"
+#include "filters/gyro_ring.hpp"
 
 #include "global_context.hpp"
 
@@ -36,7 +37,8 @@ void app_main_cpp(void) {
     ESP_LOGI(TAG, "I2C initialized successfully");
 
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
-    gctx.gyro_ring.Init(2048, kBlockSize, 1800);
+    gctx.gyro_ring = new GyroRing();
+    gctx.gyro_ring->Init(2048, kBlockSize, 1800);
 
     xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
     // xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);

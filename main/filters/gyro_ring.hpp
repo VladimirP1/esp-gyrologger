@@ -1,6 +1,7 @@
 #pragma once
 
 #include "compression/lib/fixquat.hpp"
+#include "global_context.hpp"
 
 extern "C" {
 #include <freertos/FreeRTOS.h>
@@ -49,6 +50,46 @@ class DurationSmoother {
     uint32_t dur_avg{};
 };
 
+class Calibrator {
+   public:
+    void ProcessSample(sample &s) {
+        auto &rs = std::get<raw_sample>(s.sample);
+        rs.gx += g_ofs_x;
+        rs.gy += g_ofs_y;
+        rs.gz += g_ofs_z;
+
+        RunGyroCalibration(s);
+    }
+
+   private:
+    int g_ofs_x{}, g_ofs_y{}, g_ofs_z{};
+
+    int gyr_samples{};
+    int64_t sum_gx, sum_gy, sum_gz;
+    static constexpr int kGyroCalibrationSamples = 1000;
+    void RunGyroCalibration(const sample &s) {
+        if (gctx.logger_control.calibration_pending) {
+            gctx.logger_control.calibration_pending = false;
+            sum_gx = sum_gy = sum_gz = 0;
+            gyr_samples = kGyroCalibrationSamples + 1;
+            ESP_LOGI(kLogTag, "Gyro calibration started");
+        }
+        if (gyr_samples == 1) {
+            g_ofs_x = -sum_gx / kGyroCalibrationSamples;
+            g_ofs_y = -sum_gy / kGyroCalibrationSamples;
+            g_ofs_z = -sum_gz / kGyroCalibrationSamples;
+            gyr_samples = 0;
+            ESP_LOGI(kLogTag, "Gyro calibration complete %d %d %d", g_ofs_x, g_ofs_y, g_ofs_z);
+        } else if (gyr_samples) {
+            auto &rs = std::get<raw_sample>(s.sample);
+            sum_gx += rs.gx;
+            sum_gy += rs.gy;
+            sum_gz += rs.gz;
+            gyr_samples -= 1;
+        }
+    }
+};
+
 class GyroRing {
    public:
     GyroRing() {}
@@ -95,10 +136,38 @@ class GyroRing {
             auto &s = ring_[rptr_];
             auto &rs = std::get<raw_sample>(s.sample);
 
+            calib_.ProcessSample(s);
+
             float gscale = kGyroToRads * s.duration_ns / 1e9;
             auto gyro = quat::vec{quat::base_type{gscale * rs.gx}, quat::base_type{gscale * rs.gy},
                                   quat::base_type{gscale * rs.gz}};
-            quat_rptr_ = (quat_rptr_ * quat::quat{gyro});
+            quat_rptr_ = (accel_correction_ * quat_rptr_ * quat::quat{gyro});
+
+            if (rs.flags & kFlagHaveAccel) {
+                quat::base_type ascale{kAccelToG / 16.0};
+                quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
+                if (accel.norm() > quat::base_type{0.95 / 16.0} &&
+                    accel.norm() < quat::base_type{1.05 / 16.0}) {
+                    accel = accel.normalized();
+                    quat::vec gp = quat_rptr_.rotate_point(accel);
+                    auto dq0 = (gp.z + quat::base_type{1.0}) * quat::base_type{0.5};
+                    auto corr = quat::quat(quat::base_type{dq0}, -gp.y / quat::base_type{2.0},
+                                           gp.x / quat::base_type{2.0}, quat::base_type{0.0})
+                                    .normalized();
+
+                    static uint8_t cnt;
+                    if (cnt++ == 0)
+                        printf("corr: %f\n",
+                               ((double)(corr.axis_angle() / quat::base_type{4}).norm()) * 4 *
+                                   180.0 / M_PI);
+                    accel_correction_ =
+                        quat::quat{(corr.axis_angle() * quat::base_type{-0.00005 * .01}) +
+                                   (accel_correction_.axis_angle() * quat::base_type{.99})};
+                } else {
+                    accel_correction_ = {};
+                }
+            }
+
             MaybeNormalize(quat_rptr_);
 
             s.sample = quat_rptr_;
@@ -222,6 +291,7 @@ class GyroRing {
     int chunk_size_;
     std::vector<sample> ring_;
     DurationSmoother dur_smoother{1000};
+    Calibrator calib_;
 
     uint32_t desired_interval_;
     quat::base_type inv_desired_interval_;
@@ -232,7 +302,7 @@ class GyroRing {
     volatile int wptr_{};
     int rptr_{}, sptr_{};
     quat::quat quat_rptr_{};
+    quat::quat accel_correction_{};
 
-    // Resampled ring
     std::vector<quat::quat> quats_chunk_;
 };

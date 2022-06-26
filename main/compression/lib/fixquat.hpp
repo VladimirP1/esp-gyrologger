@@ -17,6 +17,7 @@ struct vec {
     base_type x{}, y{}, z{};
     inline vec operator-(const vec &b) const;
     inline vec &operator-=(const vec &b);
+    inline vec operator+(const vec &b) const;
     inline vec &operator+=(const vec &b);
     inline vec operator/(base_type div) const;
     inline vec &operator/=(base_type div);
@@ -37,6 +38,12 @@ inline vec &vec::operator-=(const vec &b) {
     y -= b.y;
     z -= b.z;
     return *this;
+}
+
+inline vec vec::operator+(const vec &b) const {
+    vec ret = *this;
+    ret += b;
+    return ret;
 }
 
 inline vec &vec::operator+=(const vec &b) {

@@ -116,7 +116,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
-        gctx.gyro_ring.Push((time - prev_gyro_time) * 1000, gyro[0], gyro[1], gyro[2], accel[0],
+        gctx.gyro_ring->Push((time - prev_gyro_time) * 1000, gyro[0], gyro[1], gyro[2], accel[0],
                             accel[1], accel[2], have_accel ? kFlagHaveAccel : 0);
         have_gyro = false;
         have_accel = false;
