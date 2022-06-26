@@ -73,6 +73,9 @@ static const char *TAG = "gyro_mpu";
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
 static bool IRAM_ATTR gyro_timer_cb(void *args) {
+    if (gctx.terminate_for_update) {
+        return false;
+    }
     static uint64_t time = 0;
     static uint64_t prev_time = 0;
     static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
@@ -84,12 +87,14 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
     if (fifo_bytes > 0) {
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
-        gctx.gyro_ring->Push((time - prev_time) * 1000, static_cast<int>((int16_t)((tmp_data[6] << 8) | tmp_data[7])),
+        gctx.gyro_ring->Push((time - prev_time) * 1000,
+                             static_cast<int>((int16_t)((tmp_data[6] << 8) | tmp_data[7])),
                              static_cast<int>((int16_t)((tmp_data[8] << 8) | tmp_data[9])),
                              static_cast<int>((int16_t)((tmp_data[10] << 8) | tmp_data[11])),
                              static_cast<int>((int16_t)((tmp_data[0] << 8) | tmp_data[1])),
                              static_cast<int>((int16_t)((tmp_data[2] << 8) | tmp_data[3])),
-                             static_cast<int>((int16_t)((tmp_data[4] << 8) | tmp_data[5])), kFlagHaveAccel);
+                             static_cast<int>((int16_t)((tmp_data[4] << 8) | tmp_data[5])),
+                             kFlagHaveAccel);
         prev_time = time;
     }
 

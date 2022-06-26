@@ -75,6 +75,10 @@ static const char* TAG = "gyro_lsm6";
 static uint8_t dev_adr = 0x6a;
 
 static bool IRAM_ATTR gyro_timer_cb(void* args) {
+    if (gctx.terminate_for_update) {
+        return false;
+    }
+
     static uint8_t tmp_data[7];
     static uint64_t time = 0;
     static int16_t gyro[3];

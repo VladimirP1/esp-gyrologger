@@ -17,6 +17,7 @@ typedef struct {
 
     volatile bool pause_polling;
     volatile bool continue_polling;
+    volatile bool terminate_for_update;
     struct {
         SemaphoreHandle_t mutex;
 

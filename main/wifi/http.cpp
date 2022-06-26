@@ -3,11 +3,16 @@
 #include "http.hpp"
 
 extern "C" {
+#include <soc/rtc_wdt.h>
+#include <soc/timer_group_reg.h>
+#include <hal/wdt_hal.h>
 #include <esp_http_server.h>
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_partition.h>
 #include <ff.h>
+
+#include "storage/storage_fat.h"
 }
 #include <cstdio>
 
@@ -284,6 +289,104 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 static const httpd_uri_t root_get = {
     .uri = "/", .method = HTTP_GET, .handler = root_get_handler, .user_ctx = NULL};
 
+extern "C" {
+extern void spi_flash_disable_interrupts_caches_and_other_cpu(void);
+extern void spi_flash_enable_interrupts_caches_and_other_cpu(void);
+typedef enum {
+    ESP_ROM_SPIFLASH_RESULT_OK,
+    ESP_ROM_SPIFLASH_RESULT_ERR,
+    ESP_ROM_SPIFLASH_RESULT_TIMEOUT
+} esp_rom_spiflash_result_t;
+extern esp_rom_spiflash_result_t esp_rom_spiflash_erase_area(uint32_t start_addr,
+                                                             uint32_t area_len);
+extern esp_rom_spiflash_result_t esp_rom_spiflash_write(uint32_t dest_addr, const uint32_t* src,
+                                                        int32_t len);
+extern esp_rom_spiflash_result_t esp_rom_spiflash_read(uint32_t src_addr, uint32_t* dest,
+                                                       int32_t len);
+extern void esp_restart_noos(void) __attribute__((noreturn));
+}
+
+void IRAM_ATTR copy_flash(char* buf, size_t buf_size) {
+    const esp_partition_t* storage_partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "storage");
+
+    const esp_partition_t* app_partition =
+        esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, "factory");
+
+    ESP_LOGI(TAG, "storage partition: %p", storage_partition);
+    ESP_LOGI(TAG, "app partition: %p", app_partition);
+
+    rtc_wdt_protect_off();
+    rtc_wdt_disable();
+    wdt_hal_context_t wdt0ctx = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
+    wdt_hal_write_protect_disable(&wdt0ctx);
+    wdt_hal_disable(&wdt0ctx);
+    wdt_hal_write_protect_enable(&wdt0ctx);
+    wdt_hal_context_t wdt1ctx = {.inst = WDT_MWDT1, .mwdt_dev = &TIMERG1};
+    wdt_hal_write_protect_disable(&wdt1ctx);
+    wdt_hal_disable(&wdt1ctx);
+    wdt_hal_write_protect_enable(&wdt1ctx);
+
+    spi_flash_disable_interrupts_caches_and_other_cpu();
+
+    esp_rom_spiflash_erase_area(app_partition->address, app_partition->size);
+
+    for (size_t ofs = 0; ofs + buf_size < app_partition->size; ofs += buf_size) {
+        esp_rom_spiflash_read(storage_partition->address + ofs, (uint32_t*)buf, buf_size);
+        esp_rom_spiflash_write(app_partition->address + ofs, (uint32_t*)buf, buf_size);
+    }
+    *((char*)nullptr) = 1;
+}
+
+static esp_err_t update_post_handler(httpd_req_t* req) {
+    ESP_LOGI(TAG, "Receiving file ...");
+
+    gctx.terminate_for_update = true;
+    storage_fat_deinit();
+
+    static constexpr int SCRATCH_BUFSIZE = 256;
+    char buf[SCRATCH_BUFSIZE];
+    int received;
+
+    const esp_partition_t* storage_partition = esp_partition_find_first(
+        ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "storage");
+
+    ESP_ERROR_CHECK(esp_partition_erase_range(storage_partition, 0, storage_partition->size));
+    ESP_LOGI(TAG, "Data partition erased");
+
+    size_t offset{};
+    int remaining = req->content_len;
+    while (remaining > 0) {
+        if ((received = httpd_req_recv(req, buf, MIN(remaining, SCRATCH_BUFSIZE))) <= 0) {
+            if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+                ESP_LOGW(TAG, "timeout");
+                continue;
+            }
+
+            ESP_LOGE(TAG, "File reception failed!");
+            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, "Failed to receive file");
+            return ESP_FAIL;
+        }
+
+        ESP_ERROR_CHECK(esp_partition_write_raw(storage_partition, offset, buf, received));
+
+        offset += received;
+
+        remaining -= received;
+    }
+    ESP_LOGI(TAG, "File reception complete!!! Starting update!");
+
+    copy_flash(buf, SCRATCH_BUFSIZE);
+
+    httpd_resp_set_status(req, "303 See Other");
+    httpd_resp_set_hdr(req, "Location", "/");
+    httpd_resp_sendstr(req, "File uploaded successfully");
+    return ESP_OK;
+}
+
+static const httpd_uri_t update_post = {
+    .uri = "/update", .method = HTTP_POST, .handler = update_post_handler, .user_ctx = NULL};
+
 static esp_err_t root_post_handler(httpd_req_t* req) {
     char content[100];
     size_t recv_size = MIN(req->content_len, sizeof(content) - 1);
@@ -358,6 +461,7 @@ static httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &root_get);
         httpd_register_uri_handler(server, &download_get);
         httpd_register_uri_handler(server, &format_get);
+        httpd_register_uri_handler(server, &update_post);
         httpd_register_uri_handler(server, &root_post);
         return server;
     }

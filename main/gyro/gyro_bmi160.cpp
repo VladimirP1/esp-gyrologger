@@ -45,6 +45,9 @@ static uint8_t dev_adr = 0x69;
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
 static bool IRAM_ATTR gyro_timer_cb(void* args) {
+    if (gctx.terminate_for_update) {
+        return false;
+    }
     static uint8_t tmp_data[1024];
     static uint64_t time = 0;
     static uint64_t prev_gyro_time = 0;
@@ -117,7 +120,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
         gctx.gyro_ring->Push((time - prev_gyro_time) * 1000, gyro[0], gyro[1], gyro[2], accel[0],
-                            accel[1], accel[2], have_accel ? kFlagHaveAccel : 0);
+                             accel[1], accel[2], have_accel ? kFlagHaveAccel : 0);
         have_gyro = false;
         have_accel = false;
         pipeline_reset = false;

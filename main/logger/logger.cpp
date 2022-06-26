@@ -45,6 +45,11 @@ void logger_task(void *params_pvoid) {
 
     TickType_t prev_dump = xTaskGetTickCount();
     for (int i = 0;; ++i) {
+        if (gctx.terminate_for_update) {
+            ESP_LOGI(TAG, "Terminating for SW update");
+            vTaskDelete(nullptr);
+        }
+
         quat::quat *quat_block = gctx.gyro_ring->Work();
         if (!quat_block) {
             vTaskDelay(1);
