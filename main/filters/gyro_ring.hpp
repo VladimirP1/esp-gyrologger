@@ -65,7 +65,7 @@ class Calibrator {
     int g_ofs_x{}, g_ofs_y{}, g_ofs_z{};
 
     int gyr_samples{};
-    int64_t sum_gx, sum_gy, sum_gz;
+    int64_t sum_gx{}, sum_gy{}, sum_gz{};
     static constexpr int kGyroCalibrationSamples = 1000;
     void RunGyroCalibration(const sample &s) {
         if (gctx.logger_control.calibration_pending) {
@@ -291,7 +291,7 @@ class GyroRing {
     int chunk_size_;
     std::vector<sample> ring_;
     DurationSmoother dur_smoother{1000};
-    Calibrator calib_;
+    Calibrator calib_{};
 
     uint32_t desired_interval_;
     quat::base_type inv_desired_interval_;
