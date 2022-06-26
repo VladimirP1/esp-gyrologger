@@ -1,7 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include "gyro_mpu6050.hpp"
-#include "gyro_types.hpp"
 
 extern "C" {
 #include <freertos/FreeRTOS.h>
@@ -16,6 +15,7 @@ extern "C" {
 }
 
 #include "global_context.hpp"
+#include "filters/gyro_ring.hpp"
 
 static const char *TAG = "gyro_mpu";
 
@@ -78,39 +78,17 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
     BaseType_t high_task_awoken = pdFALSE;
 
-    // i2c_register_read(DEV_ADDR, REG_INT_STATUS, tmp_data, 1);
-    // if (tmp_data[0] & REG_INT_STATUS_MASK_FIFO_OFLOW)
-    // {
-    //     ESP_LOGI(TAG, "FIFO overflow!");
-    //     while (true)
-    //         ;
-    // }
-
     i2c_register_read(DEV_ADDR, REG_FIFO_COUNT_H, tmp_data, 2);
     const int fifo_bytes = tmp_data[1] | (tmp_data[0] << 8);
 
-    // if (tmp_data[0] & REG_INT_STATUS_MASK_DATA_RDY)
     if (fifo_bytes > 0) {
         i2c_register_read(DEV_ADDR, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
-        gyro_sample_message msg = {.timestamp = time,
-                                   .gyro_x = (int16_t)((tmp_data[6] << 8) | tmp_data[7]),
-                                   .gyro_y = (int16_t)((tmp_data[8] << 8) | tmp_data[9]),
-                                   .gyro_z = (int16_t)((tmp_data[10] << 8) | tmp_data[11]),
-                                   .accel_x = (int16_t)((tmp_data[0] << 8) | tmp_data[1]),
-                                   .accel_y = (int16_t)((tmp_data[2] << 8) | tmp_data[3]),
-                                   .accel_z = (int16_t)((tmp_data[4] << 8) | tmp_data[5]),
-                                   .smpl_interval_ns = 0,
-                                   .flags = GYRO_SAMPLE_NEW_ACCEL_DATA};
-        // if ((time % 1000000) < 500000) {
-        //     msg.gyro_y = (time % 100000) < 50000 ? -10000 : 10000;
-        //     msg.gyro_x = (time % 10000) < 5000 ? -100000 : 1000;
-        //     msg.gyro_z = 50000;
-        // }
-        if (xQueueSendToBackFromISR(gctx.gyro_raw_queue, &msg, &high_task_awoken) ==
-            errQUEUE_FULL) {
-            while (1)
-                ;
-        }
+        gctx.gyro_ring->Push(time, (int16_t)((tmp_data[6] << 8) | tmp_data[7]),
+                             (int16_t)((tmp_data[8] << 8) | tmp_data[9]),
+                             (int16_t)((tmp_data[10] << 8) | tmp_data[11]),
+                             (int16_t)((tmp_data[0] << 8) | tmp_data[1]),
+                             (int16_t)((tmp_data[2] << 8) | tmp_data[3]),
+                             (int16_t)((tmp_data[4] << 8) | tmp_data[5]), kFlagHaveAccel);
     }
 
     if (fifo_bytes > 900) {
@@ -122,11 +100,6 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 }
 
 void gyro_mpu6050_task(void *params_pvoid) {
-    gctx.gyro_raw_to_rads = (1.0 / 32.8 * 3.141592 / 180.0);
-    gctx.accel_raw_to_g = (16.0 / 32767);
-    gctx.gyro_interp_interval = 900;
-    gctx.gyro_decimate = 2;
-
     uint8_t data[2];
     ESP_ERROR_CHECK(i2c_register_read(DEV_ADDR, REG_WHO_AM_I, data, 1));
     ESP_LOGI(TAG, "WHO_AM_I = 0x%X", data[0]);

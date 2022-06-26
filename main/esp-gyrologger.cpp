@@ -15,11 +15,12 @@ extern "C" {
 #include <stdio.h>
 
 #include "storage/storage_fat.h"
-#include "wifi/wifi.h"
 #include "misc/misc.h"
 }
 
 #include "wifi/http.hpp"
+#include "wifi/wifi.hpp"
+#include "wifi/cam_control.hpp"
 #include "gyro/gyro.hpp"
 #include "logger/logger.hpp"
 #include "filters/gyro_ring.hpp"
@@ -29,7 +30,7 @@ extern "C" {
 static const char *TAG = "main";
 
 void app_main_cpp(void) {
-    wifi_init_softap();
+    wifi_init();
 
     ESP_ERROR_CHECK(storage_fat_init());
 
@@ -46,6 +47,7 @@ void app_main_cpp(void) {
     xTaskCreate(gyro_bmi160_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
 
     // xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
+    // xTaskCreate(camera_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
 
     http_init();
 
