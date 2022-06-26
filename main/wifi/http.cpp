@@ -3,9 +3,6 @@
 #include "http.hpp"
 
 extern "C" {
-#include <soc/rtc_wdt.h>
-#include <soc/timer_group_reg.h>
-#include <hal/wdt_hal.h>
 #include <esp_http_server.h>
 #include <esp_event.h>
 #include <esp_log.h>
@@ -13,6 +10,7 @@ extern "C" {
 #include <ff.h>
 
 #include "storage/storage_fat.h"
+#include "spi_flash_chip_driver.h"
 }
 #include <cstdio>
 
@@ -292,18 +290,6 @@ static const httpd_uri_t root_get = {
 extern "C" {
 extern void spi_flash_disable_interrupts_caches_and_other_cpu(void);
 extern void spi_flash_enable_interrupts_caches_and_other_cpu(void);
-typedef enum {
-    ESP_ROM_SPIFLASH_RESULT_OK,
-    ESP_ROM_SPIFLASH_RESULT_ERR,
-    ESP_ROM_SPIFLASH_RESULT_TIMEOUT
-} esp_rom_spiflash_result_t;
-extern esp_rom_spiflash_result_t esp_rom_spiflash_erase_area(uint32_t start_addr,
-                                                             uint32_t area_len);
-extern esp_rom_spiflash_result_t esp_rom_spiflash_write(uint32_t dest_addr, const uint32_t* src,
-                                                        int32_t len);
-extern esp_rom_spiflash_result_t esp_rom_spiflash_read(uint32_t src_addr, uint32_t* dest,
-                                                       int32_t len);
-extern void esp_restart_noos(void) __attribute__((noreturn));
 }
 
 void IRAM_ATTR copy_flash(char* buf, size_t buf_size) {
@@ -313,27 +299,25 @@ void IRAM_ATTR copy_flash(char* buf, size_t buf_size) {
     const esp_partition_t* app_partition =
         esp_partition_find_first(ESP_PARTITION_TYPE_APP, ESP_PARTITION_SUBTYPE_ANY, "factory");
 
+    uint32_t sector_size = app_partition->flash_chip->chip_drv->sector_size;
+
+    ESP_LOGI(TAG, "sector size = %u", sector_size);
     ESP_LOGI(TAG, "storage partition: %p", storage_partition);
     ESP_LOGI(TAG, "app partition: %p", app_partition);
 
-    rtc_wdt_protect_off();
-    rtc_wdt_disable();
-    wdt_hal_context_t wdt0ctx = {.inst = WDT_MWDT0, .mwdt_dev = &TIMERG0};
-    wdt_hal_write_protect_disable(&wdt0ctx);
-    wdt_hal_disable(&wdt0ctx);
-    wdt_hal_write_protect_enable(&wdt0ctx);
-    wdt_hal_context_t wdt1ctx = {.inst = WDT_MWDT1, .mwdt_dev = &TIMERG1};
-    wdt_hal_write_protect_disable(&wdt1ctx);
-    wdt_hal_disable(&wdt1ctx);
-    wdt_hal_write_protect_enable(&wdt1ctx);
+    wdt_off();
 
     spi_flash_disable_interrupts_caches_and_other_cpu();
 
-    esp_rom_spiflash_erase_area(app_partition->address, app_partition->size);
-
     for (size_t ofs = 0; ofs + buf_size < app_partition->size; ofs += buf_size) {
-        esp_rom_spiflash_read(storage_partition->address + ofs, (uint32_t*)buf, buf_size);
-        esp_rom_spiflash_write(app_partition->address + ofs, (uint32_t*)buf, buf_size);
+        storage_partition->flash_chip->chip_drv->read(storage_partition->flash_chip, buf,
+                                                      storage_partition->address + ofs, buf_size);
+        if ((app_partition->address + ofs) % sector_size == 0) {
+            app_partition->flash_chip->chip_drv->erase_sector(app_partition->flash_chip,
+                                                              app_partition->address + ofs);
+        }
+        storage_partition->flash_chip->chip_drv->write(app_partition->flash_chip, buf,
+                                                       app_partition->address + ofs, buf_size);
     }
     *((char*)nullptr) = 1;
 }

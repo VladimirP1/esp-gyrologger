@@ -126,7 +126,7 @@ void wifi_init() {
     esp_netif_create_default_wifi_ap();
     esp_netif_create_default_wifi_sta();
 
-    auto ssid = wifi_scan();
+    // auto ssid = wifi_scan();
     // wifi_init_sta(ssid);
     wifi_init_softap();
 }
