@@ -128,7 +128,7 @@ t,gx,gy,gz,ax,ay,ax
 static esp_err_t download_get_handler(httpd_req_t* req) {
     char buf[128];
     int buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (buf_len > sizeof(buf)) {
+    if (gctx.logger_control.busy || buf_len > sizeof(buf)) {
         return ESP_FAIL;
     }
     if (buf_len > 1 && httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
@@ -159,7 +159,7 @@ static esp_err_t format_get_handler(httpd_req_t* req) {
 static const httpd_uri_t format_get = {
     .uri = "/format", .method = HTTP_GET, .handler = format_get_handler, .user_ctx = NULL};
 
-std::pair<int, int> get_free_space_kb() {
+static std::pair<int, int> get_free_space_kb() {
     constexpr int kSectorBytes = 4096;
     FATFS* fs;
     DWORD fre_clust, fre_sect, tot_sect;
@@ -171,23 +171,11 @@ std::pair<int, int> get_free_space_kb() {
     return {kSectorBytes * fre_sect / 1024, kSectorBytes * tot_sect / 1024};
 }
 
-static esp_err_t root_get_handler(httpd_req_t* req) {
-    HANDLE(httpd_resp_send_chunk(req, html_prefix, HTTPD_RESP_USE_STRLEN));
-
-    HANDLE(httpd_resp_send_chunk(req, "<body><h1>EspLog (", HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, gctx.logger_control.busy ? "BUSY" : "IDLE",
-                                 HTTPD_RESP_USE_STRLEN));
-
-    HANDLE(httpd_resp_send_chunk(req, R"--()</h1>
-    <h2>Control</h2>
-    <button style="color:green;" class="command_btn" name="command" form="form_simple" value="calibrate">0</button>
-    <button style="color:red;" class="command_btn" name="command" form="form_simple" value="record">&#x23fa;</button>
-    <button style="color:black;" class="command_btn" name="command" form="form_simple" value="stop">&#x23F9;</button>
-
-    <h2>Status</h2>
+static esp_err_t status_get_handler(httpd_req_t* req) {
+    HANDLE(httpd_resp_send_chunk(req, R"--(
     <table class="status_table">
         <tr>
-            <td>Active</td>
+            <td class="status_table_name_cell">Active</td>
             <td class="status_value_table_cell">)--",
                                  HTTPD_RESP_USE_STRLEN));
 
@@ -197,7 +185,18 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
         <tr>
-            <td>Free space (kBytes)</td>
+            <td class="status_table_name_cell">Avg gyro sample int. (ns)</td>
+            <td class="status_value_table_cell">)--",
+                                 HTTPD_RESP_USE_STRLEN));
+
+    HANDLE(httpd_resp_send_chunk(req,
+                                 std::to_string(gctx.logger_control.avg_sample_interval_ns).c_str(),
+                                 HTTPD_RESP_USE_STRLEN));
+
+    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
+        </tr>
+        <tr>
+            <td class="status_table_name_cell">Free space (kBytes)</td>
             <td class="status_value_table_cell">)--",
                                  HTTPD_RESP_USE_STRLEN));
 
@@ -208,18 +207,29 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
     <tr>
-        <td>Last log length (samples)</td>
+        <td class="status_table_name_cell">Last log length (samples)</td>
         <td class="status_value_table_cell">)--",
                                  HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req,
                                  std::to_string(gctx.logger_control.total_samples_written).c_str(),
                                  HTTPD_RESP_USE_STRLEN));
+    
+    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
+        </tr>
+    <tr>
+        <td class="status_table_name_cell">Last log length (Bytes)</td>
+        <td class="status_value_table_cell">)--",
+                                 HTTPD_RESP_USE_STRLEN));
+
+    HANDLE(httpd_resp_send_chunk(req,
+                                 std::to_string(gctx.logger_control.total_bytes_written).c_str(),
+                                 HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
         <tr>
-            <td>Last log avg rate (Bytes/min)</td>
+            <td class="status_table_name_cell">Last log avg rate (Bytes/min)</td>
             <td class="status_value_table_cell">)--",
                                  HTTPD_RESP_USE_STRLEN));
 
@@ -229,16 +239,22 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
-    </table>
-    <h2>Log download</h2>
-    <table class="download_table">)--",
+    </table>)--",
                                  HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
+    return ESP_OK;
+}
+
+static const httpd_uri_t status_get = {
+    .uri = "/status", .method = HTTP_GET, .handler = status_get_handler, .user_ctx = NULL};
+
+static esp_err_t files_get_handler(httpd_req_t* req) {
+    HANDLE(httpd_resp_send_chunk(req, "<table class=\"download_table\">", HTTPD_RESP_USE_STRLEN));
     bool busy = true;
     if (xSemaphoreTake(gctx.logger_control.mutex, 2)) {
         busy = gctx.logger_control.busy;
         xSemaphoreGive(gctx.logger_control.mutex);
     }
-
     if (!busy) {
         for (int i = 0; i <= 100; ++i) {
             static constexpr char templ[] = "/spiflash/log%03d.bin";
@@ -250,7 +266,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
                 int size_kb = ftell(f) / 1024;
                 fclose(f);
 
-                snprintf(buf2, sizeof(buf2), R"--(<tr>
+                snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
             <td><a href="/download?name=log%03d.bin">log%03d.bin</a></td>
             <td class="download_table_mid_cell">%dKB</td>)--",
                          i, i, size_kb);
@@ -258,8 +274,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
                 HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
 
                 snprintf(buf2, sizeof(buf2), R"--(<td>
-                <button style="color:black;" class="delete_btn" name="unlink" form="form_simple"
-                    value="log%03d.bin">&#x274c;</button>
+                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=log%03d.bin')">&#x274c;</button>
             </td>
         </tr>)--",
                          i);
@@ -268,17 +283,40 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
             }
         }
     } else {
-        HANDLE(httpd_resp_send_chunk(req, R"--(<tr><td>Logger is BUSY!</td></tr>)--",
-                                     HTTPD_RESP_USE_STRLEN));
+        HANDLE(
+            httpd_resp_send_chunk(req, "<tr><td>Logger is BUSY!</td></tr>", HTTPD_RESP_USE_STRLEN));
     }
-    HANDLE(httpd_resp_send_chunk(req, R"--(</table>
+    HANDLE(httpd_resp_send_chunk(req, "</table>", HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
+    return ESP_OK;
+}
 
+static const httpd_uri_t files_get = {
+    .uri = "/files", .method = HTTP_GET, .handler = files_get_handler, .user_ctx = NULL};
 
+static esp_err_t root_get_handler(httpd_req_t* req) {
+    HANDLE(httpd_resp_send_chunk(req, html_prefix, HTTPD_RESP_USE_STRLEN));
+
+    HANDLE(httpd_resp_send_chunk(req, R"--(<body><h1>EspLog <div id="network_activity"></div></h1>
+    <h2>Control</h2>
+    <button style="color:green;" class="command_btn" onclick="post_command('command=calibrate')">0</button>
+    <button style="color:red;" class="command_btn" onclick="post_command('command=record')">&#x23fa;</button>
+    <button style="color:black;" class="command_btn" onclick="post_command('command=stop')">&#x23F9;</button>
+
+    <h2>Status</h2>
+     <div id="status_table">
+    Loading...
+    </div>
+    <h2>Log download</h2>
+     <div id="files_table">
+    Loading...
+    </div>
     <form id="form_simple" method="post" action=""></form>
 </body>)--",
                                  HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, js_xhr_status_updater, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
@@ -332,7 +370,8 @@ void IRAM_ATTR copy_flash_task(void* vargs) {
                                                        app_partition->address + ofs, buf_size);
     }
 
-    while(1);
+    while (1)
+        ;
 }
 
 static esp_err_t update_post_handler(httpd_req_t* req) {
@@ -355,9 +394,11 @@ static esp_err_t update_post_handler(httpd_req_t* req) {
     int remaining = req->content_len;
     while (remaining > 0) {
         if ((received = httpd_req_recv(req, buf, MIN(remaining, SCRATCH_BUFSIZE))) <= 0) {
-            if (received == HTTPD_SOCK_ERR_TIMEOUT) {
-                ESP_LOGW(TAG, "timeout");
-                continue;
+            if (received <= 0) {
+                if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+                    httpd_resp_send_408(req);
+                }
+                return ESP_FAIL;
             }
 
             ESP_LOGE(TAG, "File reception failed!");
@@ -462,6 +503,8 @@ static httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &download_get);
         httpd_register_uri_handler(server, &format_get);
         httpd_register_uri_handler(server, &update_post);
+        httpd_register_uri_handler(server, &status_get);
+        httpd_register_uri_handler(server, &files_get);
         httpd_register_uri_handler(server, &root_post);
         return server;
     }

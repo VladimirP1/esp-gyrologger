@@ -21,6 +21,31 @@ extern "C" {
 
 static const char *TAG = "wifi softAP";
 
+class WifiManager {
+   public:
+    WifiManager(const char *ap_ssid, const char *ap_pass);
+
+    static void EarlyInit();
+
+   private:
+    std::string ap_ssid_;
+    std::string ap_pass_;
+};
+
+WifiManager::WifiManager(const char *ap_ssid, const char *ap_pass)
+    : ap_ssid_(ap_ssid), ap_pass_(ap_pass) {}
+
+void WifiManager::EarlyInit() {
+    ESP_ERROR_CHECK(esp_netif_init());
+
+    ESP_ERROR_CHECK(esp_event_loop_create_default());
+    esp_netif_create_default_wifi_ap();
+    esp_netif_create_default_wifi_sta();
+
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                                void *event_data) {
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
@@ -104,12 +129,6 @@ static std::string wifi_scan(void) {
 }
 
 void wifi_init() {
-    esp_err_t ret = nvs_flash_init();
-    if (ret == ESP_ERR_NVS_NO_FREE_PAGES || ret == ESP_ERR_NVS_NEW_VERSION_FOUND) {
-        ESP_ERROR_CHECK(nvs_flash_erase());
-        ret = nvs_flash_init();
-    }
-    ESP_ERROR_CHECK(ret);
     ESP_ERROR_CHECK(esp_netif_init());
 
     ESP_ERROR_CHECK(esp_event_loop_create_default());

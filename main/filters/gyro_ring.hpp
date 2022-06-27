@@ -39,6 +39,7 @@ class DurationSmoother {
             dur_avg = sum / count;
             sum = 0;
             count = 0;
+            gctx.logger_control.avg_sample_interval_ns = dur_avg;
         }
         return dur_avg;
     }
@@ -146,8 +147,8 @@ class GyroRing {
             if (rs.flags & kFlagHaveAccel) {
                 quat::base_type ascale{kAccelToG / 16.0};
                 quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
-                if (accel.norm() > quat::base_type{0.95 / 16.0} &&
-                    accel.norm() < quat::base_type{1.05 / 16.0}) {
+                if (accel.norm() > quat::base_type{0.9 / 16.0} &&
+                    accel.norm() < quat::base_type{1.1 / 16.0}) {
                     accel = accel.normalized();
                     quat::vec gp = quat_rptr_.rotate_point(accel);
                     auto dq0 = (gp.z + quat::base_type{1.0}) * quat::base_type{0.5};
@@ -161,7 +162,7 @@ class GyroRing {
                                ((double)(corr.axis_angle() / quat::base_type{4}).norm()) * 4 *
                                    180.0 / M_PI);
                     accel_correction_ =
-                        quat::quat{(corr.axis_angle() * quat::base_type{-0.00005 * .01}) +
+                        quat::quat{(corr.axis_angle() * quat::base_type{-0.0001 * .01}) +
                                    (accel_correction_.axis_angle() * quat::base_type{.99})};
                 } else {
                     accel_correction_ = {};

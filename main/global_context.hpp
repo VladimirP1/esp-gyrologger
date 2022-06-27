@@ -34,6 +34,7 @@ typedef struct {
         int total_bytes_written;
         uint64_t log_start_ts_ms;
         int avg_logging_rate_bytes_min;
+        uint32_t avg_sample_interval_ns;
     } logger_control;
 
 } GlobalContext;
