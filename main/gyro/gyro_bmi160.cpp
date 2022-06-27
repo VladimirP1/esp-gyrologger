@@ -39,7 +39,7 @@ static const char* TAG = "gyro_bmi160";
 
 #define REG_CMD 0x7e
 
-static uint8_t dev_adr = 0x69;
+static uint8_t dev_adr = 0x68;
 
 #define TIMER_DIVIDER (16)
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)

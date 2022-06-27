@@ -41,9 +41,6 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
 }
 
 void wifi_init_sta(std::string ssid) {
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
@@ -59,9 +56,6 @@ void wifi_init_sta(std::string ssid) {
 }
 
 void wifi_init_softap() {
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler, NULL, NULL));
 
@@ -87,14 +81,11 @@ void wifi_init_softap() {
 }
 
 static std::string wifi_scan(void) {
-    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
-    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
-
     wifi_ap_record_t ap_info[15];
     uint16_t number = 15;
     memset(ap_info, 0, sizeof(ap_info));
 
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_STA));
+    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     ESP_ERROR_CHECK(esp_wifi_start());
     esp_wifi_scan_start(NULL, true);
     ESP_ERROR_CHECK(esp_wifi_scan_get_ap_records(&number, ap_info));
@@ -109,7 +100,6 @@ static std::string wifi_scan(void) {
         }
     }
     ESP_ERROR_CHECK(esp_wifi_stop());
-    ESP_ERROR_CHECK(esp_wifi_deinit());
     return "";
 }
 
@@ -126,7 +116,10 @@ void wifi_init() {
     esp_netif_create_default_wifi_ap();
     esp_netif_create_default_wifi_sta();
 
-    // auto ssid = wifi_scan();
+    wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
+    ESP_ERROR_CHECK(esp_wifi_init(&cfg));
+
+    auto ssid = wifi_scan();
     // wifi_init_sta(ssid);
     wifi_init_softap();
 }

@@ -292,7 +292,17 @@ extern void spi_flash_disable_interrupts_caches_and_other_cpu(void);
 extern void spi_flash_enable_interrupts_caches_and_other_cpu(void);
 }
 
-void IRAM_ATTR copy_flash(char* buf, size_t buf_size) {
+typedef struct {
+    char* buf;
+    size_t buf_size;
+} copy_flash_args_t;
+
+void IRAM_ATTR copy_flash_task(void* vargs) {
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
+    copy_flash_args_t& args = *static_cast<copy_flash_args_t*>(vargs);
+    char* buf = args.buf;
+    size_t buf_size = args.buf_size;
+
     const esp_partition_t* storage_partition = esp_partition_find_first(
         ESP_PARTITION_TYPE_DATA, ESP_PARTITION_SUBTYPE_DATA_FAT, "storage");
 
@@ -304,6 +314,8 @@ void IRAM_ATTR copy_flash(char* buf, size_t buf_size) {
     ESP_LOGI(TAG, "sector size = %u", sector_size);
     ESP_LOGI(TAG, "storage partition: %p", storage_partition);
     ESP_LOGI(TAG, "app partition: %p", app_partition);
+
+    ESP_LOGI(TAG, "Starting update!");
 
     wdt_off();
 
@@ -319,7 +331,8 @@ void IRAM_ATTR copy_flash(char* buf, size_t buf_size) {
         storage_partition->flash_chip->chip_drv->write(app_partition->flash_chip, buf,
                                                        app_partition->address + ofs, buf_size);
     }
-    *((char*)nullptr) = 1;
+
+    while(1);
 }
 
 static esp_err_t update_post_handler(httpd_req_t* req) {
@@ -358,13 +371,16 @@ static esp_err_t update_post_handler(httpd_req_t* req) {
 
         remaining -= received;
     }
-    ESP_LOGI(TAG, "File reception complete!!! Starting update!");
+    ESP_LOGI(TAG, "File reception complete");
 
-    copy_flash(buf, SCRATCH_BUFSIZE);
+    copy_flash_args_t* args = new copy_flash_args_t;
+    args->buf = buf;
+    args->buf_size = SCRATCH_BUFSIZE;
 
-    httpd_resp_set_status(req, "303 See Other");
-    httpd_resp_set_hdr(req, "Location", "/");
-    httpd_resp_sendstr(req, "File uploaded successfully");
+    xTaskCreate(copy_flash_task, "update", 4096, args, configMAX_PRIORITIES - 1, nullptr);
+
+    httpd_resp_set_status(req, "200 OK");
+    httpd_resp_sendstr(req, "Update task started. Please wait.\n");
     return ESP_OK;
 }
 
