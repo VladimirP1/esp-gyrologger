@@ -25,12 +25,10 @@ Although the previous version of this PCB has been manufacted and assembled by h
 
 ### Hardware prototypes
 #### EspLog
-![esp32 + mpu6050 logger](img/small_logger_esplog_lsm6dsr.jpg)
-
-Note: the final version won't need an external 3.3v LDO
+![esplog logger](img/small_logger_esplog_bmi160.jpg)
 
 #### Simple esp32c3 logger
-![esp32 + mpu6050 logger](img/small_logger_esp32c3_mpu6050.jpg)
+![esp32c3 + mpu6050 logger](img/small_logger_esp32c3_mpu6050.jpg)
 
 #### Esp32 logger
 ![esp32 + mpu6050 logger](img/small_logger_esp32_mpu6050.jpg)
