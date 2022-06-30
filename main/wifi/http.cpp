@@ -31,9 +31,48 @@ static const char* TAG = "http-server";
 
 #define HANDLE_FINALLY(x, y) \
     if ((x) != ESP_OK) {     \
-        return ESP_FAIL;     \
         y;                   \
+        return ESP_FAIL;     \
     }
+
+static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
+    char buf2[256];
+    int bytes_total = 0;
+
+    gctx.pause_polling = true;
+
+    ESP_LOGI(TAG, "Reading file");
+    FILE* f = fopen(filename, "rb");
+    if (f == NULL) {
+        ESP_LOGE(TAG, "Failed to open file for reading");
+        return ESP_FAIL;
+    }
+
+    fseek(f, 0L, SEEK_END);
+    bytes_total = ftell(f);
+    ESP_LOGI(TAG, "file size is %ld bytes", bytes_total);
+    fseek(f, 0L, SEEK_SET);
+
+    while (true) {
+        int read_bytes = fread(buf2, 1, MIN(bytes_total, 256), f);
+
+        if (read_bytes < 0) {
+            ESP_LOGE(TAG, "read error");
+            break;
+        }
+
+        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, read_bytes), fclose(f);
+                       gctx.continue_polling = true);
+    }
+
+    fclose(f);
+
+    HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), gctx.continue_polling = true);
+
+    gctx.continue_polling = true;
+
+    return ESP_OK;
+}
 
 static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     static uint8_t buf2[2000];
@@ -134,11 +173,20 @@ static esp_err_t download_get_handler(httpd_req_t* req) {
     if (buf_len > 1 && httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
         ESP_LOGI(TAG, "Found URL query => %s", buf);
         char param[32];
+        bool raw_mode = false;
+        if (httpd_query_key_value(buf, "raw", param, sizeof(param)) == ESP_OK) {
+            ESP_LOGI(TAG, "raw_mode=%s", param);
+            raw_mode = atoi(param);
+        }
         if (httpd_query_key_value(buf, "name", param, sizeof(param)) == ESP_OK) {
             ESP_LOGI(TAG, "want to download %s", param);
             snprintf(buf, sizeof(buf), "/spiflash/%s", param);
-            httpd_resp_set_hdr(req, "content-disposition", "attachment;filename=gyro.gcsv");
-            return respond_with_file(req, buf);
+            if (raw_mode) {
+                return respond_with_file_raw(req, buf);
+            } else {
+                httpd_resp_set_hdr(req, "content-disposition", "attachment;filename=gyro.gcsv");
+                return respond_with_file(req, buf);
+            }
         }
     }
 
@@ -214,7 +262,7 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req,
                                  std::to_string(gctx.logger_control.total_samples_written).c_str(),
                                  HTTPD_RESP_USE_STRLEN));
-    
+
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
     <tr>
@@ -266,18 +314,33 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
                 int size_kb = ftell(f) / 1024;
                 fclose(f);
 
-                snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
+                if (0) {
+                    snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
             <td><a href="/download?name=log%03d.bin">log%03d.bin</a></td>
             <td class="download_table_mid_cell">%dKB</td>)--",
-                         i, i, size_kb);
+                             i, i, size_kb);
 
-                HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
+                    HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
 
-                snprintf(buf2, sizeof(buf2), R"--(<td>
+                    snprintf(buf2, sizeof(buf2), R"--(<td>
+                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=log%03d.gcsv')">&#x274c;</button>
+            </td>
+        </tr>)--",
+                             i);
+                } else {
+                    snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
+            <td><a href="#" onclick='download_and_decode_log("/download?name=log%03d.bin&raw=1", "log%03d.gcsv");return false;'>log%03d.gcsv</a></td>
+            <td class="download_table_mid_cell">%dKB</td>)--",
+                             i, i, i, size_kb);
+
+                    HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
+
+                    snprintf(buf2, sizeof(buf2), R"--(<td>
                 <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=log%03d.bin')">&#x274c;</button>
             </td>
         </tr>)--",
-                         i);
+                             i);
+                }
 
                 HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
             }
@@ -317,6 +380,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_xhr_status_updater, HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
