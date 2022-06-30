@@ -8,7 +8,12 @@ extern "C" {
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <esp_log.h>
+#include <esp_check.h>
+#include <nvs_flash.h>
+#include <nvs.h>
 }
+
+#include <nvs_handle.hpp>
 
 #include <variant>
 #include <vector>
@@ -53,6 +58,26 @@ class DurationSmoother {
 
 class Calibrator {
    public:
+    Calibrator() {
+        esp_err_t err;
+        calib_handle = nvs::open_nvs_handle("storage", NVS_READWRITE, &err);
+        ESP_ERROR_CHECK(err);
+        bool fail = false;
+        err = calib_handle->get_item("ofs_x", g_ofs_x);
+        if (err != ESP_OK) fail = true;
+        err = calib_handle->get_item("ofs_y", g_ofs_y);
+        if (err != ESP_OK) fail = true;
+        err = calib_handle->get_item("ofs_z", g_ofs_z);
+        if (err != ESP_OK) fail = true;
+
+        if (fail) {
+            ESP_LOGE(kLogTag, "Failed load gyro calibration");
+            g_ofs_x = g_ofs_y = g_ofs_z = 0;
+            StoreCalibration();
+        } else {
+            ESP_LOGI(kLogTag, "Gyro calibration loaded");
+        }
+    }
     void ProcessSample(sample &s) {
         auto &rs = std::get<raw_sample>(s.sample);
         rs.gx += g_ofs_x;
@@ -67,6 +92,9 @@ class Calibrator {
 
     int gyr_samples{};
     int64_t sum_gx{}, sum_gy{}, sum_gz{};
+
+    std::shared_ptr<nvs::NVSHandle> calib_handle;
+
     static constexpr int kGyroCalibrationSamples = 1000;
     void RunGyroCalibration(const sample &s) {
         if (gctx.logger_control.calibration_pending) {
@@ -81,12 +109,32 @@ class Calibrator {
             g_ofs_z = -sum_gz / kGyroCalibrationSamples;
             gyr_samples = 0;
             ESP_LOGI(kLogTag, "Gyro calibration complete %d %d %d", g_ofs_x, g_ofs_y, g_ofs_z);
+            StoreCalibration();
         } else if (gyr_samples) {
             auto &rs = std::get<raw_sample>(s.sample);
             sum_gx += rs.gx;
             sum_gy += rs.gy;
             sum_gz += rs.gz;
             gyr_samples -= 1;
+        }
+    }
+
+    void StoreCalibration() {
+        esp_err_t err;
+        bool fail = false;
+        
+        ESP_LOGI(kLogTag, "Storing gyro calibration into nvm");
+
+        err=calib_handle->set_item("ofs_x", g_ofs_x);
+        if (err != ESP_OK) fail = true;
+        err=calib_handle->set_item("ofs_y", g_ofs_y);
+        if (err != ESP_OK) fail = true;
+        err=calib_handle->set_item("ofs_z", g_ofs_z);
+        if (err != ESP_OK) fail = true;
+
+        if (fail) {
+            ESP_LOGE(kLogTag, "Failed to store gyro calibration into nvm");
+
         }
     }
 };
