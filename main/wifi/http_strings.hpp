@@ -775,7 +775,7 @@ var wasm = [
     function downloadText(text, name) {
         var link = document.createElement("a");
         link.download = name;
-        link.href = "data:text/plain;charset=utf-8," + encodeURIComponent(text);
+        link.href = URL.createObjectURL(new Blob([text], {type: 'text/plain'}));
         document.body.appendChild(link);
         link.click();
         document.body.removeChild(link);
