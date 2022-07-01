@@ -7,7 +7,7 @@ This is in alpha-stage
 ### Supported IMUs
 The following IMUs can be used over the i2c bus:
 * MPU-6050 / MPU-6000
-* LSM6DSR (code needs update after refactor)
+* LSM6DSR
 * BMI160
 
 ### How to build
