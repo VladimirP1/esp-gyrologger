@@ -50,7 +50,7 @@ static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
 
     fseek(f, 0L, SEEK_END);
     bytes_total = ftell(f);
-    ESP_LOGI(TAG, "file size is %ld bytes", bytes_total);
+    ESP_LOGI(TAG, "file size is %d bytes", bytes_total);
     fseek(f, 0L, SEEK_SET);
 
     while (true) {
