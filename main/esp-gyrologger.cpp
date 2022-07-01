@@ -51,8 +51,8 @@ void app_main_cpp(void) {
     gctx.gyro_ring = new GyroRing();
     gctx.gyro_ring->Init(2048, kBlockSize, 1800);
 
-    xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
-    
+    xTaskCreate(logger_task, "logger", 2048, NULL, configMAX_PRIORITIES - 1, NULL);
+
     gyro_probe_and_start_task();
 
     // xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);

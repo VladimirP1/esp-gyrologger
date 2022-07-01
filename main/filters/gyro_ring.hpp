@@ -18,6 +18,8 @@ extern "C" {
 #include <variant>
 #include <vector>
 
+static constexpr int loglevel = 0;
+
 static constexpr float kGyroToRads = 1.0 / 32.8 * 3.141592 / 180.0;
 static constexpr float kAccelToG = 16.0 / 32767;
 struct raw_sample {
@@ -122,19 +124,18 @@ class Calibrator {
     void StoreCalibration() {
         esp_err_t err;
         bool fail = false;
-        
+
         ESP_LOGI(kLogTag, "Storing gyro calibration into nvm");
 
-        err=calib_handle->set_item("ofs_x", g_ofs_x);
+        err = calib_handle->set_item("ofs_x", g_ofs_x);
         if (err != ESP_OK) fail = true;
-        err=calib_handle->set_item("ofs_y", g_ofs_y);
+        err = calib_handle->set_item("ofs_y", g_ofs_y);
         if (err != ESP_OK) fail = true;
-        err=calib_handle->set_item("ofs_z", g_ofs_z);
+        err = calib_handle->set_item("ofs_z", g_ofs_z);
         if (err != ESP_OK) fail = true;
 
         if (fail) {
             ESP_LOGE(kLogTag, "Failed to store gyro calibration into nvm");
-
         }
     }
 };
@@ -204,11 +205,13 @@ class GyroRing {
                                            gp.x / quat::base_type{2.0}, quat::base_type{0.0})
                                     .normalized();
 
-                    static uint8_t cnt;
-                    if (cnt++ == 0)
-                        printf("corr: %f\n",
-                               ((double)(corr.axis_angle() / quat::base_type{4}).norm()) * 4 *
-                                   180.0 / M_PI);
+                    if (loglevel >= 3) {
+                        static uint8_t cnt;
+                        if (cnt++ == 0)
+                            printf("corr: %f\n",
+                                   ((double)(corr.axis_angle() / quat::base_type{4}).norm()) * 4 *
+                                       180.0 / M_PI);
+                    }
                     accel_correction_ =
                         quat::quat{(corr.axis_angle() * quat::base_type{-0.0001 * .01}) +
                                    (accel_correction_.axis_angle() * quat::base_type{.99})};
@@ -260,7 +263,9 @@ class GyroRing {
                 if (interp_ts_ >= 2 * kTsWrapInterval) {
                     interp_ts_ -= kTsWrapInterval;
                     sptr_ts_ -= kTsWrapInterval;
-                    ESP_LOGI(kLogTag, "wrap");
+                    if (loglevel >= 3) {
+                        ESP_LOGI(kLogTag, "wrap");
+                    }
                 }
             }
             {  // Interpolate
@@ -293,9 +298,11 @@ class GyroRing {
                 }
                 interp_ts_ += desired_interval_ * 1000;
 
-                static uint8_t xx{};
-                if (!++xx) {
-                    ESP_LOGI(kLogTag, "rg %d %u", dbg_cnt, ring_[cached_sptr].duration_ns);
+                if (loglevel >= 3) {
+                    static uint8_t xx{};
+                    if (!++xx) {
+                        ESP_LOGI(kLogTag, "rg %d %u", dbg_cnt, ring_[cached_sptr].duration_ns);
+                    }
                 }
                 if (k_sum != quat::base_type{}) {
                     q.w /= k_sum;
@@ -305,7 +312,9 @@ class GyroRing {
                 }
                 quats_chunk_.push_back(q);
                 if (quats_chunk_.size() >= chunk_size_) {
-                    ESP_LOGI(kLogTag, "produced chunk size %d", chunk_size_);
+                    if (loglevel >= 2) {
+                        ESP_LOGI(kLogTag, "produced chunk size %d", chunk_size_);
+                    }
                     return quats_chunk_.data();
                 }
             }
@@ -335,7 +344,7 @@ class GyroRing {
     }
 
    private:
-    static constexpr int kResamlpingLag = 64;
+    static constexpr int kResamlpingLag = 32;
 
     int chunk_size_;
     std::vector<sample> ring_;

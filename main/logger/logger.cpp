@@ -105,7 +105,7 @@ void logger_task(void *params_pvoid) {
                 auto cur_dump = xTaskGetTickCount();
                 double elapsed = (xTaskGetTickCount() - prev_dump) * 1.0 / configTICK_RATE_HZ;
                 prev_dump = cur_dump;
-                ESP_LOGI(TAG, "%d bytes, logger capacity at this rate = %.2f h, max_error = % .4f ",
+                ESP_LOGI(TAG, "%d bytes, capacity = %.2f h, max_error = % .4f ",
                          (int)out_buf_size, 3000000 / (out_buf_size / elapsed) / 60 / 60,
                          float(max_error_rad) * 180 / M_PI);
 
