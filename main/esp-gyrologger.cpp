@@ -52,9 +52,8 @@ void app_main_cpp(void) {
     gctx.gyro_ring->Init(2048, kBlockSize, 1800);
 
     xTaskCreate(logger_task, "logger", 4096, NULL, configMAX_PRIORITIES - 2, NULL);
-    // xTaskCreate(gyro_mpu6050_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
-    // xTaskCreate(gyro_lsm6_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
-    xTaskCreate(gyro_bmi160_task, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
+    
+    gyro_probe_and_start_task();
 
     // xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
     // xTaskCreate(camera_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);

@@ -254,6 +254,17 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
         </tr>
+        <tr>
+            <td class="status_table_name_cell">Free heap size (kBytes)</td>
+            <td class="status_value_table_cell">)--",
+                                 HTTPD_RESP_USE_STRLEN));
+
+    HANDLE(httpd_resp_send_chunk(req,
+                                 std::to_string(esp_get_free_heap_size() / 1024).c_str(),
+                                 HTTPD_RESP_USE_STRLEN));
+
+    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
+        </tr>
     <tr>
         <td class="status_table_name_cell">Last log length (samples)</td>
         <td class="status_value_table_cell">)--",
