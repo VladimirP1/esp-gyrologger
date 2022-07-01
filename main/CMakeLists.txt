@@ -11,6 +11,7 @@ idf_component_register(
         # "misc/misc.c" 
         "storage/storage_fat.c" 
         "wifi/wifi.cpp" 
+        "wifi/random_names.cpp" 
         "wifi/cam_control.cpp" 
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")

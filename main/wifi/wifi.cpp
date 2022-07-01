@@ -12,10 +12,10 @@ extern "C" {
 #include <string.h>
 }
 
+#include "random_names.hpp"
+
 #include <string>
 
-#define EXAMPLE_ESP_WIFI_SSID "z-log"
-#define EXAMPLE_ESP_WIFI_PASS "12345678"
 #define EXAMPLE_ESP_WIFI_CHANNEL 11
 #define EXAMPLE_MAX_STA_CONN 4
 
@@ -80,29 +80,29 @@ void wifi_init_sta(std::string ssid) {
     ESP_LOGI(TAG, "wifi_init_sta finished.");
 }
 
+std::string generate_ssid() {
+    uint8_t mac[6];
+    ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP));
+    return "esplog_" + random_name(mac[3] << 16 | mac[4] << 8 | mac[5]);
+}
+
 void wifi_init_softap() {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler, NULL, NULL));
 
-    wifi_config_t wifi_config = {.ap = {.ssid_len = strlen(EXAMPLE_ESP_WIFI_SSID),
+    std::string ssid = generate_ssid();
+    wifi_config_t wifi_config = {.ap = {.ssid_len = (uint8_t)ssid.length(),
                                         .channel = EXAMPLE_ESP_WIFI_CHANNEL,
                                         .authmode = WIFI_AUTH_WPA_WPA2_PSK,
                                         .max_connection = EXAMPLE_MAX_STA_CONN}};
-    strcpy((char *)wifi_config.ap.ssid, EXAMPLE_ESP_WIFI_SSID);
-    strcpy((char *)wifi_config.ap.password, EXAMPLE_ESP_WIFI_PASS);
-
-    if (strlen(EXAMPLE_ESP_WIFI_PASS) == 0) {
-        wifi_config.ap.authmode = WIFI_AUTH_OPEN;
-    }
+    strcpy((char *)wifi_config.ap.ssid, ssid.c_str());
+    strcpy((char *)wifi_config.ap.password, "12345678");
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
     ESP_ERROR_CHECK(esp_wifi_start());
     ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(8));
     ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B));
-
-    ESP_LOGI(TAG, "wifi_init_softap finished. SSID:%s password:%s channel:%d",
-             EXAMPLE_ESP_WIFI_SSID, EXAMPLE_ESP_WIFI_PASS, EXAMPLE_ESP_WIFI_CHANNEL);
 }
 
 static std::string wifi_scan(void) {
