@@ -29,6 +29,6 @@ void gyro_probe_and_start_task() {
             xTaskCreate(entry.task_ptr, "gyro-task", 4096, NULL, configMAX_PRIORITIES - 1, NULL);
             break;
         }
-        ESP_LOGE("gyro_probe", "No gyro found!");
     }
+    ESP_LOGE("gyro_probe", "No gyro found!");
 }

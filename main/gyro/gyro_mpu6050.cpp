@@ -108,7 +108,7 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
 bool probe_mpu6050(uint8_t dev_adr) {
     uint8_t data[1];
-    if (i2c_register_read(gctx.gyro_i2c_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
+    if (i2c_register_read(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
         return false;
     }
     return data[0] == 0x68;
