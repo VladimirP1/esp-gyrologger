@@ -3,7 +3,7 @@ idf_component_register(
         "esp-gyrologger.cpp" 
         "global_context.cpp"
         "gyro/gyro_bmi160.cpp" 
-        # "gyro/gyro_lsm6.cpp" 
+        "gyro/gyro_lsm6.cpp" 
         "gyro/gyro_mpu6050.cpp" 
         "gyro/gyro_probe.cpp" 
         "logger/logger.cpp" 

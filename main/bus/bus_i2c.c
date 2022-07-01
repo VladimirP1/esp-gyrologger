@@ -30,9 +30,10 @@ static inline void SCL(bool x) {
     }
 }
 
-#define HCLK()                    \
-    for (int i = 0; i < 10; i++) { \
-        __asm__("nop");           \
+static int hclk_top = 10;
+#define HCLK()                           \
+    for (int i = 0; i < hclk_top; i++) { \
+        __asm__("nop");                  \
     };
 
 #elif CONFIG_IDF_TARGET_ESP32
@@ -54,9 +55,10 @@ static inline void SCL(bool x) {
     }
 }
 
-#define HCLK()                    \
-    for (int i = 0; i < 10; i++) { \
-        __asm__("nop");           \
+static int hclk_top = 10;
+#define HCLK()                     \
+    for (int i = 0; i < hclk_top; i++) { \
+        __asm__("nop");            \
     };
 
 #endif
@@ -81,6 +83,8 @@ esp_err_t i2c_master_init() {
 
     return ESP_OK;
 }
+
+void i2c_set_overclock(bool enable) { hclk_top = enable ? 0 : 10; }
 
 static void IRAM_ATTR i2c_bb_start() {
     SDA(1);
