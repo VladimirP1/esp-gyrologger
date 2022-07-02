@@ -9,6 +9,9 @@ extern "C" {
 #include <esp_partition.h>
 #include <ff.h>
 
+#include <sys/types.h>
+#include <dirent.h>
+
 #include "storage/storage_fat.h"
 #include "spi_flash_chip_driver.h"
 }
@@ -259,8 +262,7 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
             <td class="status_value_table_cell">)--",
                                  HTTPD_RESP_USE_STRLEN));
 
-    HANDLE(httpd_resp_send_chunk(req,
-                                 std::to_string(esp_get_free_heap_size() / 1024).c_str(),
+    HANDLE(httpd_resp_send_chunk(req, std::to_string(esp_get_free_heap_size() / 1024).c_str(),
                                  HTTPD_RESP_USE_STRLEN));
 
     HANDLE(httpd_resp_send_chunk(req, R"--(</td>
@@ -315,46 +317,55 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
         xSemaphoreGive(gctx.logger_control.mutex);
     }
     if (!busy) {
-        for (int i = 0; i <= 100; ++i) {
-            static constexpr char templ[] = "/spiflash/log%03d.bin";
-            char buf[30], buf2[300];
-            snprintf(buf, sizeof(buf), templ, i);
-            FILE* f = fopen(buf, "rb");
-            if (f) {
-                fseek(f, 0, SEEK_END);
-                int size_kb = ftell(f) / 1024;
-                fclose(f);
+        DIR* dp;
+        struct dirent* ep;
 
-                if (0) {
-                    snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
-            <td><a href="/download?name=log%03d.bin">log%03d.bin</a></td>
+        dp = opendir("/spiflash");
+        if (dp != NULL) {
+            while ((ep = readdir(dp))) {
+                static constexpr char templ[] = "/spiflash/%s";
+                char buf[30], buf2[300];
+                snprintf(buf, sizeof(buf), templ, ep->d_name);
+                FILE* f = fopen(buf, "rb");
+                if (f) {
+                    fseek(f, 0, SEEK_END);
+                    int size_kb = ftell(f) / 1024;
+                    fclose(f);
+
+                    if (0) {
+                        (void)snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
+            <td><a href="/download?name=%s">%s</a></td>
             <td class="download_table_mid_cell">%dKB</td>)--",
-                             i, i, size_kb);
+                                 ep->d_name, ep->d_name, size_kb);
 
-                    HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
+                        HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
 
-                    snprintf(buf2, sizeof(buf2), R"--(<td>
-                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=log%03d.gcsv')">&#x274c;</button>
+                        (void)snprintf(buf2, sizeof(buf2), R"--(<td>
+                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=%s')">&#x274c;</button>
             </td>
         </tr>)--",
-                             i);
-                } else {
-                    snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
-            <td><a href="#" onclick='download_and_decode_log("/download?name=log%03d.bin&raw=1", "log%03d.gcsv");return false;'>log%03d.gcsv</a></td>
+                                 ep->d_name);
+                    } else {
+                        (void)snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
+            <td><a href="#" onclick='download_and_decode_log("/download?name=%s&raw=1", "%s.gcsv");return false;'>%s</a></td>
             <td class="download_table_mid_cell">%dKB</td>)--",
-                             i, i, i, size_kb);
+                                 ep->d_name, ep->d_name, ep->d_name, size_kb);
 
-                    HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
+                        HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
 
-                    snprintf(buf2, sizeof(buf2), R"--(<td>
-                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=log%03d.bin')">&#x274c;</button>
+                        (void)snprintf(buf2, sizeof(buf2), R"--(<td>
+                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=%s')">&#x274c;</button>
             </td>
         </tr>)--",
-                             i);
+                                 ep->d_name);
+                    }
+
+                    HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
                 }
-
-                HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
             }
+            (void)closedir(dp);
+        } else {
+            ESP_LOGE(TAG, "Couldn't open the directory");
         }
     } else {
         HANDLE(
