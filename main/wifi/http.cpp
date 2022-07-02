@@ -317,7 +317,7 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
     if (!busy) {
         for (int i = 0; i <= 100; ++i) {
             static constexpr char templ[] = "/spiflash/log%03d.bin";
-            char buf[30], buf2[256];
+            char buf[30], buf2[300];
             snprintf(buf, sizeof(buf), templ, i);
             FILE* f = fopen(buf, "rb");
             if (f) {

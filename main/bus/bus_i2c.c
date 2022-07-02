@@ -55,10 +55,10 @@ static inline void SCL(bool x) {
     }
 }
 
-static int hclk_top = 10;
-#define HCLK()                     \
+static int hclk_top = 2;
+#define HCLK()                           \
     for (int i = 0; i < hclk_top; i++) { \
-        __asm__("nop");            \
+        __asm__("nop");                  \
     };
 
 #endif
@@ -84,7 +84,13 @@ esp_err_t i2c_master_init() {
     return ESP_OK;
 }
 
-void i2c_set_overclock(bool enable) { hclk_top = enable ? 0 : 10; }
+void i2c_set_overclock(bool enable) {
+#if CONFIG_IDF_TARGET_ESP32C3
+    hclk_top = enable ? 0 : 10;
+#elif CONFIG_IDF_TARGET_ESP32
+    hclk_top = enable ? 0 : 2;
+#endif
+}
 
 static void IRAM_ATTR i2c_bb_start() {
     SDA(1);
@@ -146,7 +152,7 @@ static void IRAM_ATTR i2c_bb_stop() {
     HCLK();
 }
 
-esp_err_t IRAM_ATTR i2c_register_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t *data,
+esp_err_t IRAM_ATTR i2c_register_read(uint8_t dev_addr, uint8_t reg_addr, uint8_t* data,
                                       size_t len) {
     i2c_bb_start();
     if (!i2c_bb_sendbyte(dev_addr << 1)) {  // WRITE
