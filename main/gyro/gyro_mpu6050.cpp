@@ -19,8 +19,6 @@ extern "C" {
 
 static const char *TAG = "gyro_mpu";
 
-// #define gctx.gyro_i2c_adr 0x68
-
 #define REG_SMPRT_DIV 0x19
 
 #define REG_CONFIG 0x1a
@@ -69,42 +67,51 @@ static const char *TAG = "gyro_mpu";
 
 #define FIFO_SAMPLE_SIZE 12
 
-#define TIMER_DIVIDER (16)  //  Hardware timer clock divider
+#define TIMER_DIVIDER (16)
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
+static uint64_t cur_time = 0;
+static volatile bool stop = false;
+static void IRAM_ATTR gyro_i2c_cb(void *arg) {
+    static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
+    static uint64_t prev_time = 0;
+    if (gctx.terminate_for_update) {
+        return;
+    }
+    mini_i2c_read_reg_get_result(tmp_data, FIFO_SAMPLE_SIZE);
+    gctx.gyro_ring->Push((cur_time - prev_time) * 1000,
+                         static_cast<int>((int16_t)((tmp_data[6] << 8) | tmp_data[7])),
+                         static_cast<int>((int16_t)((tmp_data[8] << 8) | tmp_data[9])),
+                         static_cast<int>((int16_t)((tmp_data[10] << 8) | tmp_data[11])),
+                         static_cast<int>((int16_t)((tmp_data[0] << 8) | tmp_data[1])),
+                         static_cast<int>((int16_t)((tmp_data[2] << 8) | tmp_data[3])),
+                         static_cast<int>((int16_t)((tmp_data[4] << 8) | tmp_data[5])),
+                         kFlagHaveAccel);
+    prev_time = cur_time;
+}
 
 static bool IRAM_ATTR gyro_timer_cb(void *args) {
     if (gctx.terminate_for_update) {
         return false;
     }
-    static uint64_t time = 0;
-    static uint64_t prev_time = 0;
-    static uint8_t tmp_data[FIFO_SAMPLE_SIZE];
+    static uint8_t tmp_data[2];
+    cur_time += 900;
 
-    BaseType_t high_task_awoken = pdFALSE;
+    if (mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, tmp_data, 2) == ESP_OK) {
+        const int fifo_bytes = tmp_data[1] | (tmp_data[0] << 8);
 
-    mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, tmp_data, 2);
-    const int fifo_bytes = tmp_data[1] | (tmp_data[0] << 8);
+        if (fifo_bytes > 900) {
+            while (1)
+                ;
+        }
 
-    if (fifo_bytes > 0) {
-        mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
-        gctx.gyro_ring->Push((time - prev_time) * 1000,
-                             static_cast<int>((int16_t)((tmp_data[6] << 8) | tmp_data[7])),
-                             static_cast<int>((int16_t)((tmp_data[8] << 8) | tmp_data[9])),
-                             static_cast<int>((int16_t)((tmp_data[10] << 8) | tmp_data[11])),
-                             static_cast<int>((int16_t)((tmp_data[0] << 8) | tmp_data[1])),
-                             static_cast<int>((int16_t)((tmp_data[2] << 8) | tmp_data[3])),
-                             static_cast<int>((int16_t)((tmp_data[4] << 8) | tmp_data[5])),
-                             kFlagHaveAccel);
-        prev_time = time;
+        if (fifo_bytes > 0) {
+            mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_RW, FIFO_SAMPLE_SIZE, gyro_i2c_cb,
+                                       NULL);
+        }
     }
 
-    if (fifo_bytes > 900) {
-        while (1)
-            ;
-    }
-    time += 900;
-    return high_task_awoken;
+    return false;
 }
 
 bool probe_mpu6050(uint8_t dev_adr) {

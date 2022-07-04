@@ -6,6 +6,9 @@
 #include "hal/i2c_hal.h"
 #include "mini_i2c.h"
 #include "soc/i2c_periph.h"
+#include <freertos/FreeRTOS.h>
+#include <freertos/task.h>
+#include <freertos/semphr.h>
 #include "soc/soc.h"
 #include <stdio.h>
 
@@ -19,10 +22,11 @@ typedef enum { I2C_STATUS_IDLE, I2C_STATUS_FAIL, I2C_STATUS_ACTIVE } i2c_status_
 typedef struct {
     i2c_hal_context_t hal;
     intr_handle_t int_hndl;
-    i2c_status_t status;
+    volatile i2c_status_t status;
     int sda_pin, scl_pin;
     void (*callback)(void* args);
     void* callback_args;
+    SemaphoreHandle_t mtx;
 } i2c_ctx_t;
 
 i2c_ctx_t i2c_ctx;
@@ -58,11 +62,10 @@ static void IRAM_ATTR i2c_isr_handler(void* arg) {
     }
 }
 
-static inline void mini_i2c_write_txfifo(i2c_hal_context_t *hal, uint8_t *ptr, uint8_t len)
-{
+static inline void mini_i2c_write_txfifo(i2c_hal_context_t* hal, uint8_t* ptr, uint8_t len) {
     // TODO: handle i2c 0/1
     uint32_t fifo_addr = 0x6001301c;
-    for(int i = 0; i < len; i++) {
+    for (int i = 0; i < len; i++) {
         WRITE_PERI_REG(fifo_addr, ptr[i]);
     }
 }
@@ -106,6 +109,7 @@ static esp_err_t i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int scl_io_nu
 
 esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq) {
     esp_err_t err;
+    i2c_ctx.mtx = xSemaphoreCreateMutex();
     i2c_ctx.hal.dev = I2C_LL_GET_HW((0));
     i2c_ctx.status = I2C_STATUS_IDLE;
     if ((err = i2c_conf_pins(0, sda_pin, scl_pin, 1, 1) != ESP_OK)) {
@@ -121,12 +125,16 @@ esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq) {
     i2c_hal_update_config(&i2c_ctx.hal);
     i2c_hal_disable_intr_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);
     i2c_hal_clr_intsts_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);
-    esp_intr_alloc(i2c_periph_signal[0].irq, 0, i2c_isr_handler, NULL, &i2c_ctx.int_hndl);
+    esp_intr_alloc(i2c_periph_signal[0].irq, ESP_INTR_FLAG_IRAM, i2c_isr_handler, NULL,
+                   &i2c_ctx.int_hndl);
     return ESP_OK;
 }
 
 esp_err_t IRAM_ATTR mini_i2c_read_reg_sync(uint8_t dev_adr, uint8_t reg_adr, uint8_t* bytes,
                                            uint8_t n_bytes) {
+    if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
+        return ESP_ERR_NOT_FINISHED;
+    }
     int idx = 0;
     uint8_t data[] = {dev_adr << 1, reg_adr, (dev_adr << 1) | 1};
     mini_i2c_write_txfifo(&i2c_ctx.hal, data, 3);
@@ -173,14 +181,18 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_sync(uint8_t dev_adr, uint8_t reg_adr, uin
     i2c_hal_txfifo_rst(&i2c_ctx.hal);
 
     if (i2c_ctx.status != I2C_STATUS_IDLE) {
+        xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
         return ESP_FAIL;
     }
-
+    xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
     return ESP_OK;
 }
 
 esp_err_t IRAM_ATTR mini_i2c_read_reg_callback(uint8_t dev_adr, uint8_t reg_adr, uint8_t n_bytes,
                                                void (*callback)(void* args), void* callback_args) {
+    if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
+        return ESP_ERR_NOT_FINISHED;
+    }
     int idx = 0;
     uint8_t data[] = {dev_adr << 1, reg_adr, (dev_adr << 1) | 1};
     mini_i2c_write_txfifo(&i2c_ctx.hal, data, 3);
@@ -228,20 +240,21 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_get_result(uint8_t* bytes, uint8_t n_bytes
     i2c_hal_txfifo_rst(&i2c_ctx.hal);
 
     if (i2c_ctx.status != I2C_STATUS_IDLE) {
+        xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
         return ESP_FAIL;
     }
 
+    xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
     return ESP_OK;
 }
 
 esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, uint8_t byte) {
+    if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
+        return ESP_ERR_NOT_FINISHED;
+    }
     int idx = 0;
     uint8_t data[] = {dev_adr << 1, reg_adr, byte};
     mini_i2c_write_txfifo(&i2c_ctx.hal, data, 3);
-    // uint32_t fifo_addr = 0x6001301c;
-    // for (int i = 0; i < 3; i++) {
-    //     WRITE_PERI_REG(fifo_addr, data[i]);
-    // }
     {
         i2c_hw_cmd_t hw_cmd = {.op_code = I2C_LL_CMD_RESTART};
         i2c_hal_write_cmd_reg(&i2c_ctx.hal, hw_cmd, idx++);
@@ -268,9 +281,11 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, ui
     i2c_hal_txfifo_rst(&i2c_ctx.hal);
 
     if (i2c_ctx.status != I2C_STATUS_IDLE) {
+        xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
         return ESP_FAIL;
     }
 
+    xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
     return ESP_OK;
 }
 

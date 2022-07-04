@@ -10,6 +10,7 @@ extern "C" {
 #include <ff.h>
 
 #include <sys/types.h>
+#include <sys/stat.h>
 #include <dirent.h>
 
 #include "storage/storage_fat.h"
@@ -309,6 +310,9 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
 static const httpd_uri_t status_get = {
     .uri = "/status", .method = HTTP_GET, .handler = status_get_handler, .user_ctx = NULL};
 
+static SemaphoreHandle_t file_list_mtx;
+static std::vector<std::pair<std::string, int>> file_list;
+
 static esp_err_t files_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, "<table class=\"download_table\">", HTTPD_RESP_USE_STRLEN));
     bool busy = true;
@@ -316,60 +320,44 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
         busy = gctx.logger_control.busy;
         xSemaphoreGive(gctx.logger_control.mutex);
     }
-    if (!busy) {
-        DIR* dp;
-        struct dirent* ep;
-
-        dp = opendir("/spiflash");
-        if (dp != NULL) {
-            while ((ep = readdir(dp))) {
-                static constexpr char templ[] = "/spiflash/%s";
-                char buf[30], buf2[300];
-                snprintf(buf, sizeof(buf), templ, ep->d_name);
-                FILE* f = fopen(buf, "rb");
-                if (f) {
-                    fseek(f, 0, SEEK_END);
-                    int size_kb = ftell(f) / 1024;
-                    fclose(f);
-
-                    if (0) {
-                        (void)snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
+    xSemaphoreTake(file_list_mtx, portMAX_DELAY);
+    for (auto& f : file_list) {
+        char buf2[300];
+        if (0) {
+            (void)snprintf(buf2, sizeof(buf2),
+                           R"--(<tr class="download_table_name_cell">
             <td><a href="/download?name=%s">%s</a></td>
             <td class="download_table_mid_cell">%dKB</td>)--",
-                                 ep->d_name, ep->d_name, size_kb);
+                           f.first.c_str(), f.first.c_str(), f.second);
 
-                        HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
+            HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN),
+                           xSemaphoreGive(file_list_mtx));
 
-                        (void)snprintf(buf2, sizeof(buf2), R"--(<td>
+            (void)snprintf(buf2, sizeof(buf2), R"--(<td>
                 <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=%s')">&#x274c;</button>
             </td>
         </tr>)--",
-                                 ep->d_name);
-                    } else {
-                        (void)snprintf(buf2, sizeof(buf2), R"--(<tr class="download_table_name_cell">
+                           f.first.c_str());
+        } else {
+            (void)snprintf(buf2, sizeof(buf2),
+                           R"--(<tr class="download_table_name_cell">
             <td><a href="#" onclick='download_and_decode_log("/download?name=%s&raw=1", "%s.gcsv");return false;'>%s</a></td>
             <td class="download_table_mid_cell">%dKB</td>)--",
-                                 ep->d_name, ep->d_name, ep->d_name, size_kb);
+                           f.first.c_str(), f.first.c_str(), f.first.c_str(), f.second);
 
-                        HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
+            HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN),
+                           xSemaphoreGive(file_list_mtx));
 
-                        (void)snprintf(buf2, sizeof(buf2), R"--(<td>
+            (void)snprintf(buf2, sizeof(buf2), R"--(<td>
                 <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=%s')">&#x274c;</button>
             </td>
         </tr>)--",
-                                 ep->d_name);
-                    }
-
-                    HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
-                }
-            }
-            (void)closedir(dp);
-        } else {
-            ESP_LOGE(TAG, "Couldn't open the directory");
+                           f.first.c_str());
         }
-    } else {
-        HANDLE(
-            httpd_resp_send_chunk(req, "<tr><td>Logger is BUSY!</td></tr>", HTTPD_RESP_USE_STRLEN));
+
+        xSemaphoreGive(file_list_mtx);
+        HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
+
     }
     HANDLE(httpd_resp_send_chunk(req, "</table>", HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
@@ -601,7 +589,41 @@ static httpd_handle_t start_webserver(void) {
 
 static esp_err_t stop_webserver(httpd_handle_t server) { return httpd_stop(server); }
 
+static void background_scanner_task(void* param) {
+    while (true) {
+        std::vector<std::pair<std::string, int>> new_file_list;
+        DIR* dp;
+        struct dirent* ep;
+        dp = opendir("/spiflash");
+        if (dp != NULL) {
+            while ((ep = readdir(dp))) {
+                static constexpr char templ[] = "/spiflash/%s";
+                char buf[30], buf2[300];
+                snprintf(buf, sizeof(buf), templ, ep->d_name);
+                struct stat st;
+                if (stat(buf, &st) == 0) {
+                    int size_kb = st.st_size / 1024;
+                    new_file_list.push_back({ep->d_name, size_kb});
+                }
+            }
+            (void)closedir(dp);
+        } else {
+            ESP_LOGE(TAG, "Couldn't open the directory");
+        }
+        std::sort(new_file_list.begin(), new_file_list.end());
+        xSemaphoreTake(file_list_mtx, portMAX_DELAY);
+        file_list = std::move(new_file_list);
+        xSemaphoreGive(file_list_mtx);
+        vTaskDelay(1000 / portTICK_PERIOD_MS);
+    }
+}
+
 void http_init() {
+    file_list_mtx = xSemaphoreCreateMutex();
+
+    xTaskCreate(background_scanner_task, "background-scanner", 2048, nullptr,
+                configMAX_PRIORITIES - 10, nullptr);
+
     static httpd_handle_t server = NULL;
 
     server = start_webserver();
