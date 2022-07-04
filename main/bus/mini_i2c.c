@@ -121,7 +121,12 @@ esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq) {
     i2c_hal_master_init(&i2c_ctx.hal, 0);
     i2c_hal_set_filter(&i2c_ctx.hal, 7);
     i2c_hal_set_tout(&i2c_ctx.hal, 10);
+    #if CONFIG_IDF_TARGET_ESP32C3
+    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_XTAL);
+    #elif CONFIG_IDF_TARGET_ESP32
     i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_APB);
+    #endif
+
     i2c_hal_update_config(&i2c_ctx.hal);
     i2c_hal_disable_intr_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);
     i2c_hal_clr_intsts_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);
