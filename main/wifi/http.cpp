@@ -171,9 +171,6 @@ t,gx,gy,gz,ax,ay,ax
 static esp_err_t download_get_handler(httpd_req_t* req) {
     char buf[128];
     int buf_len = httpd_req_get_url_query_len(req) + 1;
-    if (gctx.logger_control.busy || buf_len > sizeof(buf)) {
-        return ESP_FAIL;
-    }
     if (buf_len > 1 && httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
         ESP_LOGI(TAG, "Found URL query => %s", buf);
         char param[32];
@@ -315,11 +312,6 @@ static std::vector<std::pair<std::string, int>> file_list;
 
 static esp_err_t files_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, "<table class=\"download_table\">", HTTPD_RESP_USE_STRLEN));
-    bool busy = true;
-    if (xSemaphoreTake(gctx.logger_control.mutex, 2)) {
-        busy = gctx.logger_control.busy;
-        xSemaphoreGive(gctx.logger_control.mutex);
-    }
     xSemaphoreTake(file_list_mtx, portMAX_DELAY);
     for (auto& f : file_list) {
         char buf2[300];
