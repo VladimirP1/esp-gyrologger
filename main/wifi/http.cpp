@@ -347,10 +347,9 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
                            f.first.c_str());
         }
 
-        xSemaphoreGive(file_list_mtx);
-        HANDLE(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN));
-
+        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN), xSemaphoreGive(file_list_mtx));
     }
+    xSemaphoreGive(file_list_mtx);
     HANDLE(httpd_resp_send_chunk(req, "</table>", HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
