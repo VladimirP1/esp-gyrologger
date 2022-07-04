@@ -1,7 +1,7 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 extern "C" {
-#include "bus/bus_i2c.h"
+#include "bus/mini_i2c.h"
 
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -45,7 +45,7 @@ void app_main_cpp(void) {
 
     ESP_ERROR_CHECK(storage_fat_init());
 
-    ESP_ERROR_CHECK(i2c_master_init());
+    ESP_ERROR_CHECK(mini_i2c_init(17, 16, 400000));
 
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
     gctx.gyro_ring = new GyroRing();

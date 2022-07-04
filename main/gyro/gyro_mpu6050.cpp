@@ -11,7 +11,7 @@ extern "C" {
 #include <esp_attr.h>
 #include <driver/timer.h>
 
-#include "bus/bus_i2c.h"
+#include "bus/mini_i2c.h"
 }
 
 #include "global_context.hpp"
@@ -72,6 +72,7 @@ static const char *TAG = "gyro_mpu";
 #define TIMER_DIVIDER (16)  //  Hardware timer clock divider
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
+
 static bool IRAM_ATTR gyro_timer_cb(void *args) {
     if (gctx.terminate_for_update) {
         return false;
@@ -82,11 +83,11 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
     BaseType_t high_task_awoken = pdFALSE;
 
-    i2c_register_read(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, tmp_data, 2);
+    mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, tmp_data, 2);
     const int fifo_bytes = tmp_data[1] | (tmp_data[0] << 8);
 
     if (fifo_bytes > 0) {
-        i2c_register_read(gctx.gyro_i2c_adr, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
+        mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_RW, tmp_data, FIFO_SAMPLE_SIZE);
         gctx.gyro_ring->Push((time - prev_time) * 1000,
                              static_cast<int>((int16_t)((tmp_data[6] << 8) | tmp_data[7])),
                              static_cast<int>((int16_t)((tmp_data[8] << 8) | tmp_data[9])),
@@ -108,7 +109,7 @@ static bool IRAM_ATTR gyro_timer_cb(void *args) {
 
 bool probe_mpu6050(uint8_t dev_adr) {
     uint8_t data[1];
-    if (i2c_register_read(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
+    if (mini_i2c_read_reg_sync(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
         return false;
     }
     return data[0] == 0x68;
@@ -116,31 +117,33 @@ bool probe_mpu6050(uint8_t dev_adr) {
 
 void gyro_mpu6050_task(void *params_pvoid) {
     /* Reset */
-    ESP_ERROR_CHECK(i2c_register_write_byte(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, REG_PWR_MGMT_1_MASK_RESET));
+    ESP_ERROR_CHECK(
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, REG_PWR_MGMT_1_MASK_RESET));
     ESP_LOGI(TAG, "IMU reset");
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, 0));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, 0));
     ESP_LOGI(TAG, "IMU wake up");
 
     ESP_ERROR_CHECK(
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_PWR_MGMT_1,
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1,
                                 REG_PWR_MGMT_1_VALUE_CLKSEL_ZGYRO << REG_PWR_MGMT_1_BIT_CLKSEL_0));
     ESP_LOGI(TAG, "IMU change clock");
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
-    ESP_ERROR_CHECK(i2c_register_write_byte(gctx.gyro_i2c_adr, REG_SMPRT_DIV, 7));
     ESP_ERROR_CHECK(
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_GYRO_CONFIG,
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_SMPRT_DIV, 7));
+    ESP_ERROR_CHECK(
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYRO_CONFIG,
                                 REG_GYRO_CONFIG_VALUE_FS_1000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
     ESP_ERROR_CHECK(
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_ACCEL_CONFIG,
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACCEL_CONFIG,
                                 REG_ACCEL_CONFIG_VALUE_FS_16_G << REG_ACCEL_CONFIG_BIT_FS_SEL_0));
 
-    ESP_ERROR_CHECK(i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_EN,
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_EN,
                                             REG_FIFO_EN_MASK_ACCEL | REG_FIFO_EN_MASK_GYRO));
-    ESP_ERROR_CHECK(
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_USER_CONTROL, REG_USER_CONTROL_MASK_FIFO_EN));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_USER_CONTROL,
+                                            REG_USER_CONTROL_MASK_FIFO_EN));
 
     timer_config_t config = {
         .alarm_en = TIMER_ALARM_EN,

@@ -7,3 +7,4 @@ entries:
 archive: libhal.a
 entries:
     gpio_hal (noflash)
+    i2c_hal (noflash)
