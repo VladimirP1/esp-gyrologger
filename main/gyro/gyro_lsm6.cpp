@@ -172,7 +172,6 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
         while (1)
             ;
     }
-    cur_gyro_time += 220;
     return false;
 }
 

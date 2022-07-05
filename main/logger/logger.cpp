@@ -126,7 +126,7 @@ void logger_task(void *params_pvoid) {
         }
 
         static int flush_gate = 0;
-        if (f && (++flush_gate) % 10 == 0) {
+        if (f && (++flush_gate) % 25 == 0) {
             if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
                 gctx.logger_control.total_bytes_written = ftell(f);
                 int log_duration_ms =

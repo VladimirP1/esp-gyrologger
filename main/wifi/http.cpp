@@ -311,47 +311,28 @@ static SemaphoreHandle_t file_list_mtx;
 static std::vector<std::pair<std::string, int>> file_list;
 
 static esp_err_t files_get_handler(httpd_req_t* req) {
-    HANDLE(httpd_resp_send_chunk(req, "<table class=\"download_table\">", HTTPD_RESP_USE_STRLEN));
     xSemaphoreTake(file_list_mtx, portMAX_DELAY);
+    std::string resp;
+    resp.append("<table class=\"download_table\">");
     for (auto& f : file_list) {
-        char buf2[300];
-        if (0) {
-            (void)snprintf(buf2, sizeof(buf2),
-                           R"--(<tr class="download_table_name_cell">
-            <td><a href="/download?name=%s">%s</a></td>
-            <td class="download_table_mid_cell">%dKB</td>)--",
-                           f.first.c_str(), f.first.c_str(), f.second);
-
-            HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN),
-                           xSemaphoreGive(file_list_mtx));
-
-            (void)snprintf(buf2, sizeof(buf2), R"--(<td>
-                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=%s')">&#x274c;</button>
-            </td>
-        </tr>)--",
-                           f.first.c_str());
-        } else {
-            (void)snprintf(buf2, sizeof(buf2),
-                           R"--(<tr class="download_table_name_cell">
-            <td><a href="#" onclick='download_and_decode_log("/download?name=%s&raw=1", "%s.gcsv");return false;'>%s</a></td>
-            <td class="download_table_mid_cell">%dKB</td>)--",
-                           f.first.c_str(), f.first.c_str(), f.first.c_str(), f.second);
-
-            HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN),
-                           xSemaphoreGive(file_list_mtx));
-
-            (void)snprintf(buf2, sizeof(buf2), R"--(<td>
-                <button style="color:black;" class="delete_btn"  onclick="post_command('unlink=%s')">&#x274c;</button>
-            </td>
-        </tr>)--",
-                           f.first.c_str());
-        }
-
-        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, HTTPD_RESP_USE_STRLEN), xSemaphoreGive(file_list_mtx));
+        resp.append(
+            R"--(<tr class="download_table_name_cell"><td><a href="#" onclick='download_and_decode_log("/download?name=)--");
+        resp.append(f.first);
+        resp.append("&raw=1\", \"");
+        resp.append(f.first);
+        resp.append(".gcsv\");return false;'>");
+        resp.append(f.first);
+        resp.append(R"--(</a></td> <td class="download_table_mid_cell">)--");
+        resp.append(std::to_string(f.second));
+        resp.append("KB</td>");
+        resp.append(
+            R"--(<td><button style="color:black;" class="delete_btn"  onclick="post_command('unlink=)--");
+        resp.append(f.first);
+        resp.append(R"--(')">&#x274c;</button></td></tr>)--");
     }
+    resp.append("</table>");
     xSemaphoreGive(file_list_mtx);
-    HANDLE(httpd_resp_send_chunk(req, "</table>", HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
+    HANDLE(httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
     return ESP_OK;
 }
 
@@ -367,11 +348,11 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     <button style="color:red;" class="command_btn" onclick="post_command('command=record')">&#x23fa;</button>
     <button style="color:black;" class="command_btn" onclick="post_command('command=stop')">&#x23F9;</button>
 
-    <h2>Status</h2>
+    <h2 id="status_label">Status</h2>
      <div id="status_table">
     Loading...
     </div>
-    <h2>Log download</h2>
+    <h2 id="files_label">Log download</h2>
      <div id="files_table">
     Loading...
     </div>

@@ -75,7 +75,27 @@ const char js_xhr_status_updater[] = R"--(
             elem.style.backgroundColor ="black";
         }
     };
+    var update = function(path, element, interval, timeout, indicate) {
+        let controller = new AbortController();
+        let restarted = false;
+        function restart(t) {
+            if (!restarted) {
+                restarted = true;
+                setTimeout(()=>{update(path, element, interval, timeout, indicate);}, t);
+            }
+        }
+        let to = setTimeout(()=>{ controller.abort(); }, timeout);
+        fetch(path, {signal: controller.signal}).then((resp)=>{
+            resp.text().then((text)=>{ 
+                clearTimeout(to); 
+                document.getElementById(element).innerHTML = text; 
+                indicate(); 
+                restart(interval); 
+            }, (error) => { clearTimeout(to); restart(1000); });
+        }, (error) => { clearTimeout(to); restart(1000); });
+    };
     function make_updater(path, element, interval, timeout, indicate) {
+        
         var xhr = new XMLHttpRequest();
         var do_request = function() {
             xhr.open('GET', path);
@@ -93,14 +113,35 @@ const char js_xhr_status_updater[] = R"--(
         xhr.ontimeout = xhr.onerror;
         do_request();
     }
-    make_updater( '/status', 'status_table', 500, 200, indicate);
-    make_updater( '/files', 'files_table', 2000, 1000, indicate);
+    var status_last_update = (new Date()).getTime();
+    var files_last_update = (new Date()).getTime();
+    update( '/status', 'status_table', 500, 1000, ()=>{
+        indicate();
+        status_last_update = (new Date()).getTime();});
+    update( '/files', 'files_table', 1000, 1000,  ()=>{
+        indicate();
+        files_last_update = (new Date()).getTime();});
+
+    setInterval(()=>{ 
+        let status_label = document.getElementById("status_label");
+        let files_label = document.getElementById("files_label");
+        if ((new Date()).getTime() - status_last_update > 2000) {
+            status_label.style.color = "red";
+        } else {
+            status_label.style.color = "black";
+        }
+        if ((new Date()).getTime() - files_last_update > 2000) {
+            files_label.style.color = "red";
+        } else {
+            files_label.style.color = "black";
+        }
+    }, 1000);
 
     function post_command(command) {
         let xhr = new XMLHttpRequest();
         xhr.open('POST', '/');
         xhr.send(command);
-        xhr.timeout = 5000;
+        xhr.timeout = 10000;
     }
 </script>)--";
 
