@@ -57,8 +57,10 @@ static void IRAM_ATTR i2c_isr_handler(void* arg) {
         return;
     }
     if (i2c_ctx.callback) {
-        i2c_ctx.callback(i2c_ctx.callback_args);
+        void (*callback)(void* args);
+        callback = i2c_ctx.callback;
         i2c_ctx.callback = NULL;
+        callback(i2c_ctx.callback_args);
     }
 }
 
@@ -107,6 +109,16 @@ static esp_err_t i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int scl_io_nu
     return ESP_OK;
 }
 
+esp_err_t mini_i2c_set_timing(int freq) {
+#if CONFIG_IDF_TARGET_ESP32C3
+    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_XTAL);
+#elif CONFIG_IDF_TARGET_ESP32
+    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_APB);
+#endif
+    i2c_hal_update_config(&i2c_ctx.hal);
+    return ESP_OK;
+}
+
 esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq) {
     esp_err_t err;
     i2c_ctx.mtx = xSemaphoreCreateMutex();
@@ -121,11 +133,7 @@ esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq) {
     i2c_hal_master_init(&i2c_ctx.hal, 0);
     i2c_hal_set_filter(&i2c_ctx.hal, 7);
     i2c_hal_set_tout(&i2c_ctx.hal, 10);
-    #if CONFIG_IDF_TARGET_ESP32C3
-    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_XTAL);
-    #elif CONFIG_IDF_TARGET_ESP32
-    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_APB);
-    #endif
+    mini_i2c_set_timing(freq);
 
     i2c_hal_update_config(&i2c_ctx.hal);
     i2c_hal_disable_intr_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);
@@ -140,6 +148,10 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_sync(uint8_t dev_adr, uint8_t reg_adr, uin
     if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
         return ESP_ERR_NOT_FINISHED;
     }
+
+    i2c_hal_rxfifo_rst(&i2c_ctx.hal);
+    i2c_hal_txfifo_rst(&i2c_ctx.hal);
+
     int idx = 0;
     uint8_t data[] = {dev_adr << 1, reg_adr, (dev_adr << 1) | 1};
     mini_i2c_write_txfifo(&i2c_ctx.hal, data, 3);
@@ -182,8 +194,6 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_sync(uint8_t dev_adr, uint8_t reg_adr, uin
     }
 
     i2c_hal_read_rxfifo(&i2c_ctx.hal, bytes, n_bytes);
-    i2c_hal_rxfifo_rst(&i2c_ctx.hal);
-    i2c_hal_txfifo_rst(&i2c_ctx.hal);
 
     if (i2c_ctx.status != I2C_STATUS_IDLE) {
         xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
@@ -198,6 +208,10 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_callback(uint8_t dev_adr, uint8_t reg_adr,
     if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
         return ESP_ERR_NOT_FINISHED;
     }
+
+    i2c_hal_rxfifo_rst(&i2c_ctx.hal);
+    i2c_hal_txfifo_rst(&i2c_ctx.hal);
+
     int idx = 0;
     uint8_t data[] = {dev_adr << 1, reg_adr, (dev_adr << 1) | 1};
     mini_i2c_write_txfifo(&i2c_ctx.hal, data, 3);
@@ -241,8 +255,6 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_callback(uint8_t dev_adr, uint8_t reg_adr,
 
 esp_err_t IRAM_ATTR mini_i2c_read_reg_get_result(uint8_t* bytes, uint8_t n_bytes) {
     i2c_hal_read_rxfifo(&i2c_ctx.hal, bytes, n_bytes);
-    i2c_hal_rxfifo_rst(&i2c_ctx.hal);
-    i2c_hal_txfifo_rst(&i2c_ctx.hal);
 
     if (i2c_ctx.status != I2C_STATUS_IDLE) {
         xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
@@ -257,6 +269,10 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, ui
     if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
         return ESP_ERR_NOT_FINISHED;
     }
+
+    i2c_hal_rxfifo_rst(&i2c_ctx.hal);
+    i2c_hal_txfifo_rst(&i2c_ctx.hal);
+
     int idx = 0;
     uint8_t data[] = {dev_adr << 1, reg_adr, byte};
     mini_i2c_write_txfifo(&i2c_ctx.hal, data, 3);
@@ -282,9 +298,6 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, ui
         i2c_isr_handler(NULL);
     }
 
-    i2c_hal_rxfifo_rst(&i2c_ctx.hal);
-    i2c_hal_txfifo_rst(&i2c_ctx.hal);
-
     if (i2c_ctx.status != I2C_STATUS_IDLE) {
         xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
         return ESP_FAIL;
@@ -293,6 +306,11 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, ui
     xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
     return ESP_OK;
 }
+
+#undef SOC_I2C_SUPPORT_HW_FSM_RST
+#define SOC_I2C_SUPPORT_HW_FSM_RST 0
+#undef SOC_I2C_SUPPORT_HW_CLR_BUS
+#define SOC_I2C_SUPPORT_HW_CLR_BUS 0
 
 static esp_err_t mini_i2c_master_clear_bus(i2c_port_t i2c_num) {
 #if !SOC_I2C_SUPPORT_HW_CLR_BUS
@@ -364,6 +382,7 @@ esp_err_t mini_i2c_hw_fsm_reset() {
     i2c_hal_set_sda_timing(&i2c_ctx.hal, sda_sample, sda_hold);
     i2c_hal_set_tout(&i2c_ctx.hal, timeout);
     i2c_hal_set_filter(&i2c_ctx.hal, filter_cfg);
+    i2c_hal_update_config(&i2c_ctx.hal);
 #else
     i2c_hal_master_fsm_rst(&i2c_ctx.hal);
     mini_i2c_master_clear_bus(i2c_num);

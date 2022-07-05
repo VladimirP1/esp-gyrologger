@@ -82,11 +82,10 @@ class Calibrator {
     }
     void ProcessSample(sample &s) {
         auto &rs = std::get<raw_sample>(s.sample);
+        RunGyroCalibration(s);
         rs.gx += g_ofs_x;
         rs.gy += g_ofs_y;
         rs.gz += g_ofs_z;
-
-        RunGyroCalibration(s);
     }
 
    private:

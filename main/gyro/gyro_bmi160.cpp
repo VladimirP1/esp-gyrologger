@@ -11,7 +11,7 @@ extern "C" {
 #include <esp_attr.h>
 #include <driver/timer.h>
 
-#include "bus/bus_i2c.h"
+#include "bus/mini_i2c.h"
 }
 
 #include "filters/gyro_ring.hpp"
@@ -56,16 +56,16 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
     static bool have_gyro = false, have_accel = false, pipeline_reset = false;
 
     if (gctx.pause_polling) {
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0);
         gctx.pause_polling = false;
         return false;
     } else if (gctx.continue_polling) {
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);
         gctx.continue_polling = false;
         pipeline_reset = true;
     }
 
-    i2c_register_read(gctx.gyro_i2c_adr, REG_FIFO_DATA, tmp_data, 1);
+    mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_DATA, tmp_data, 1);
     uint8_t fh_mode = tmp_data[0] >> 6;
     uint8_t fh_parm = (tmp_data[0] >> 2) & 0x0f;
     if (tmp_data[0] == 0x80) {  // invalid / empty frame
@@ -80,7 +80,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
         if (fh_parm & 1) {  // have acc
             bytes_to_read += 6;
         }
-        i2c_register_read(gctx.gyro_i2c_adr, REG_FIFO_DATA, tmp_data, bytes_to_read);
+        mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_DATA, tmp_data, bytes_to_read);
 
         int i = 1;
         if (fh_parm & 4) {  // have mag
@@ -103,7 +103,7 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 
     } else if (fh_mode == 1) {  // control frame
         if (fh_parm == 0) {     // skip
-            i2c_register_read(gctx.gyro_i2c_adr, REG_FIFO_DATA, tmp_data, 2);
+            mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_DATA, tmp_data, 2);
             while (1)
                 ;
         } else if (fh_parm == 1) {  // sensortime
@@ -136,7 +136,7 @@ static bool IRAM_ATTR gyro_timer_cb_c(void* args) { return gyro_timer_cb(args); 
 
 bool probe_bmi160(uint8_t dev_adr) {
     uint8_t data[1];
-    if (i2c_register_read(dev_adr, 0x00, data, 1) != ESP_OK) {
+    if (mini_i2c_read_reg_sync(dev_adr, 0x00, data, 1) != ESP_OK) {
         return false;
     }
     return data[0] == 0xD1;
@@ -144,26 +144,26 @@ bool probe_bmi160(uint8_t dev_adr) {
 
 void gyro_bmi160_task(void* params) {
     for (int i = 0; i < 10; ++i) {
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CMD, 0xb6);  // reset
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb6);  // reset
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CMD, 0xb0);  // fifo reset
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb0);  // fifo reset
 
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CMD, 0b00010001);  // start accel
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0b00010001);  // start accel
     vTaskDelay(10 / portTICK_PERIOD_MS);
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CMD, 0b00010101);  // start gyro
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0b00010101);  // start gyro
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_ACC_RANGE, 0b1100);
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_ACC_CONF, 0b00101000);
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00101100);
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_RANGE, 0b1100);
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_CONF, 0b00101000);
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00101100);
 
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0, 0);
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0, 0);
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);
 
     timer_config_t config = {
         .alarm_en = TIMER_ALARM_EN,

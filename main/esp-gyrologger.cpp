@@ -45,13 +45,13 @@ void app_main_cpp(void) {
 
     ESP_ERROR_CHECK(storage_fat_init());
 
-    ESP_ERROR_CHECK(mini_i2c_init(17, 16, 400000));
+    ESP_ERROR_CHECK(mini_i2c_init(6, 7, 400000));
 
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
     gctx.gyro_ring = new GyroRing();
     gctx.gyro_ring->Init(2048, kBlockSize, 1800);
 
-    xTaskCreate(logger_task, "logger", 2048, NULL, configMAX_PRIORITIES - 1, NULL);
+    xTaskCreate(logger_task, "logger", 3084, NULL, configMAX_PRIORITIES - 1, NULL);
 
     gyro_probe_and_start_task();
 

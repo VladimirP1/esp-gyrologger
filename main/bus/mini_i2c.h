@@ -16,3 +16,4 @@ esp_err_t mini_i2c_read_reg_callback(uint8_t dev_adr, uint8_t reg_adr, uint8_t n
 esp_err_t mini_i2c_read_reg_get_result(uint8_t* bytes, uint8_t n_bytes);
 
 esp_err_t mini_i2c_hw_fsm_reset();
+esp_err_t mini_i2c_set_timing(int freq);

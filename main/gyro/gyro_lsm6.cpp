@@ -11,7 +11,7 @@ extern "C" {
 #include <esp_attr.h>
 #include <driver/timer.h>
 
-#include "bus/bus_i2c.h"
+#include "bus/mini_i2c.h"
 }
 
 #include "filters/gyro_ring.hpp"
@@ -72,61 +72,45 @@ static const char* TAG = "gyro_lsm6";
 #define TIMER_DIVIDER (16)
 #define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
 
-// static uint8_t gctx.gyro_i2c_adr = 0x6a;
+static SemaphoreHandle_t time_mtx;
+static uint64_t cur_gyro_time = 0;
+static uint64_t prev_gyro_time = 0;
+static bool have_gyro = false, have_accel = false, pipeline_reset = false;
 
-static bool IRAM_ATTR gyro_timer_cb(void* args) {
+static bool IRAM_ATTR pend_read_fifo(int left);
+
+static void IRAM_ATTR gyro_i2c_cb(void* arg) {
     if (gctx.terminate_for_update) {
-        return false;
+        return;
+    }
+
+    static uint64_t time = 0;
+    if (xSemaphoreTakeFromISR(time_mtx, nullptr)) {
+        time = cur_gyro_time;
+        xSemaphoreGiveFromISR(time_mtx, nullptr);
     }
 
     static uint8_t tmp_data[7];
-    static uint64_t time = 0;
-    static uint64_t prev_gyro_time = 0;
     static int16_t gyro[3];
     static int16_t accel[3];
-    static bool have_gyro = false, have_accel = false, pipeline_reset = false;
 
     static constexpr int64_t kGyroPrescale =
         32768 * (35e-3 * 3.141592 / 180.0) / (1.0 / 32.8 * 3.141592 / 180.0);
     static constexpr int64_t kAccelPrescale = 32768 * 0.488e-3 / (16.0 / 32767);
 
-    if (gctx.pause_polling) {
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CTRL4,
-                                (0 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
-        gctx.pause_polling = false;
-        return false;
-    } else if (gctx.continue_polling) {
-        i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CTRL4,
-                                (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
-        gctx.continue_polling = false;
-        pipeline_reset = true;
+    mini_i2c_read_reg_get_result(tmp_data, 7);
+    uint8_t tag = (tmp_data[0] >> 3);
+    if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_GYRO) {
+        gyro[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kGyroPrescale / 32768;
+        gyro[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kGyroPrescale / 32768;
+        gyro[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kGyroPrescale / 32768;
+        have_gyro = true;
+    } else if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_ACCEL) {
+        accel[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kAccelPrescale / 32768;
+        accel[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kAccelPrescale / 32768;
+        accel[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kAccelPrescale / 32768;
+        have_accel = true;
     }
-
-    i2c_register_read(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, tmp_data, 2);
-    const int fifo_bytes = tmp_data[0] | ((tmp_data[1] & 0x03) << 8);
-
-    if (fifo_bytes > 0) {
-        i2c_register_read(gctx.gyro_i2c_adr, REG_FIFO_DATA_OUT_TAG, tmp_data, 7);
-        uint8_t tag = (tmp_data[0] >> 3);
-        if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_GYRO) {
-            gyro[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kGyroPrescale / 32768;
-            gyro[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kGyroPrescale / 32768;
-            gyro[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kGyroPrescale / 32768;
-            have_gyro = true;
-        } else if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_ACCEL) {
-            accel[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kAccelPrescale / 32768;
-            accel[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kAccelPrescale / 32768;
-            accel[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kAccelPrescale / 32768;
-            have_accel = true;
-        }
-    }
-
-    if (fifo_bytes > 256) {
-        while (1)
-            ;
-    }
-
-    BaseType_t high_task_awoken = pdFALSE;
     if (have_gyro) {
         gctx.gyro_ring->Push((time - prev_gyro_time) * 1000, gyro[0], gyro[1], gyro[2], accel[0],
                              accel[1], accel[2], have_accel ? kFlagHaveAccel : 0);
@@ -135,35 +119,91 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
         pipeline_reset = false;
         prev_gyro_time = time;
     }
+    int left = (int)arg;
+    if (left - 1 > 0) {
+        pend_read_fifo(left - 1);
+    }
+}
+
+static bool IRAM_ATTR pend_read_fifo(int left) {
+    return mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA_OUT_TAG, 7, gyro_i2c_cb,
+                                      (void*)left);
+}
+
+static bool IRAM_ATTR gyro_timer_cb(void* args) {
+    if (gctx.terminate_for_update) {
+        return false;
+    }
+
+    static uint64_t time = 0;
+    if (xSemaphoreTakeFromISR(time_mtx, nullptr)) {
+        cur_gyro_time = time;
+        xSemaphoreGiveFromISR(time_mtx, nullptr);
+    }
     time += 220;
-    return high_task_awoken;
+
+    if (gctx.pause_polling) {
+        // TODO: fix this
+        if (mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL4,
+                                    (0 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0)) == ESP_OK) {
+            gctx.pause_polling = false;
+            return false;
+        }
+    } else if (gctx.continue_polling) {
+        if (mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL4,
+                                    (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0)) == ESP_OK) {
+            gctx.continue_polling = false;
+            pipeline_reset = true;
+        }
+    }
+
+    static uint8_t tmp_data[7];
+
+    if (mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, tmp_data, 2) != ESP_OK) {
+        return false;
+    }
+    int fifo_bytes = tmp_data[0] | ((tmp_data[1] & 0x03) << 8);
+
+    if (fifo_bytes > 0) {
+        pend_read_fifo(fifo_bytes);
+    }
+
+    if (fifo_bytes > 256) {
+        while (1)
+            ;
+    }
+    cur_gyro_time += 220;
+    return false;
 }
 
 bool probe_lsm6(uint8_t dev_adr) {
     static uint8_t data[1];
-    if (i2c_register_read(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
+    if (mini_i2c_read_reg_sync(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
+        ESP_LOGW("gyro-prober", "read failed");
         return false;
     }
+    ESP_LOGI("gyro-prober", "ok %02X", data[0]);
     return data[0] == 0x6b;
 }
 
 void gyro_lsm6_task(void* params) {
-    i2c_set_overclock(true);
+    time_mtx = xSemaphoreCreateMutex();
+    mini_i2c_set_timing(500000);
 
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_SW_RESET));
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_SW_RESET));
 
     vTaskDelay(5);
 
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CTRL3_C,
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C,
                             (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
 
     // clang-format off
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CTRL6_C, (3 << REG_CTRL6_C_BIT_FTYPE_0));
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G));
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (2 << REG_CTRL2_G_BIT_FS0_G)); // 9 is 3.33 khz
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 5 is 208 hz
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0));
-    i2c_register_write_byte(gctx.gyro_i2c_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL6_C, (3 << REG_CTRL6_C_BIT_FTYPE_0));
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G));
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (2 << REG_CTRL2_G_BIT_FS0_G)); // 9 is 3.33 khz
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 5 is 208 hz
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0));
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
     // clang-format on
 
     timer_config_t config = {
