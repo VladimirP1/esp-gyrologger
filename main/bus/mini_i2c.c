@@ -17,8 +17,6 @@
 void periph_module_enable(periph_module_t periph);
 void periph_module_disable(periph_module_t periph);
 
-typedef enum { I2C_STATUS_IDLE, I2C_STATUS_FAIL, I2C_STATUS_ACTIVE } i2c_status_t;
-
 typedef struct {
     i2c_hal_context_t hal;
     intr_handle_t int_hndl;
@@ -44,7 +42,7 @@ static void IRAM_ATTR i2c_isr_handler(void* arg) {
     }
 
     if (evt_type == I2C_INTR_EVENT_NACK) {
-        i2c_ctx.status = I2C_STATUS_FAIL;
+        i2c_ctx.status = I2C_STATUS_NACK;
     } else if (evt_type == I2C_INTR_EVENT_TOUT) {
         i2c_ctx.status = I2C_STATUS_FAIL;
     } else if (evt_type == I2C_INTR_EVENT_ARBIT_LOST) {
@@ -62,6 +60,10 @@ static void IRAM_ATTR i2c_isr_handler(void* arg) {
         i2c_ctx.callback = NULL;
         callback(i2c_ctx.callback_args);
     }
+}
+
+i2c_status_t IRAM_ATTR mini_i2c_get_status() {
+    return i2c_ctx.status;
 }
 
 static inline void mini_i2c_write_txfifo(i2c_hal_context_t* hal, uint8_t* ptr, uint8_t len) {
