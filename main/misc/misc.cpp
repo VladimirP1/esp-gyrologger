@@ -25,7 +25,8 @@ void led_task(void* params) {
     bool dir = false;
 
     while (true) {
-        if (gctx.logger_control.busy) {
+        if (gctx.logger_control.busy &&
+            (esp_timer_get_time() - gctx.logger_control.last_block_time_us <= 2000000ULL)) {
             sigmadelta_set_duty(SIGMADELTA_CHANNEL_0, 127);
             vTaskDelay(100 / portTICK_PERIOD_MS);
             sigmadelta_set_duty(SIGMADELTA_CHANNEL_0, -128);
