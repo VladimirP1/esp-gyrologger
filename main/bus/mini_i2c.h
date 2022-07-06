@@ -21,3 +21,5 @@ esp_err_t mini_i2c_hw_fsm_reset();
 esp_err_t mini_i2c_set_timing(int freq);
 
 i2c_status_t mini_i2c_get_status();
+
+esp_err_t mini_i2c_double_stop_timing();
