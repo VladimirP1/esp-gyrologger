@@ -68,56 +68,59 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
     static int16_t accel[3] = {0, 0, 0};
     static bool have_gyro = false, have_accel = false, pipeline_reset = false;
 
-    mini_i2c_read_reg_get_result(tmp_data, bytes_to_read);
-    if (bytes_to_read == 1) {
-        fh_mode = tmp_data[0] >> 6;
-        fh_parm = (tmp_data[0] >> 2) & 0x0f;
-        if (tmp_data[0] == 0x80) {  // invalid / empty frame
-        } else if (fh_mode == 2) {  // regular frame
-            bytes_to_read = 1;
+    if (mini_i2c_read_reg_get_result(tmp_data, bytes_to_read) == ESP_OK) {
+        if (bytes_to_read == 1) {
+            fh_mode = tmp_data[0] >> 6;
+            fh_parm = (tmp_data[0] >> 2) & 0x0f;
+            if (tmp_data[0] == 0x80) {  // invalid / empty frame
+            } else if (fh_mode == 2) {  // regular frame
+                bytes_to_read = 1;
+                if (fh_parm & 4) {  // have mag
+                    bytes_to_read += 6;
+                }
+                if (fh_parm & 2) {  // have gyr
+                    bytes_to_read += 6;
+                }
+                if (fh_parm & 1) {  // have acc
+                    bytes_to_read += 6;
+                }
+            } else if (fh_mode == 1) {  // control frame
+                if (fh_parm == 0) {     // skip
+                    while (1)
+                        ;
+                } else if (fh_parm == 1) {  // sensortime
+                                            // TODO
+                    while (1)
+                        ;
+                } else if (fh_parm == 2) {  // fifo input config
+                                            // TODO
+                    while (1)
+                        ;
+                }
+            }
+        } else {
+            int i = 1;
             if (fh_parm & 4) {  // have mag
-                bytes_to_read += 6;
+                i += 6;
             }
             if (fh_parm & 2) {  // have gyr
-                bytes_to_read += 6;
+                gyro[0] = (int16_t)((tmp_data[i + 1] << 8) | tmp_data[i + 0]);
+                gyro[1] = (int16_t)((tmp_data[i + 3] << 8) | tmp_data[i + 2]);
+                gyro[2] = (int16_t)((tmp_data[i + 5] << 8) | tmp_data[i + 4]);
+                i += 6;
+                have_gyro = true;
             }
             if (fh_parm & 1) {  // have acc
-                bytes_to_read += 6;
+                accel[0] = (int16_t)((tmp_data[i + 1] << 8) | tmp_data[i + 0]);
+                accel[1] = (int16_t)((tmp_data[i + 3] << 8) | tmp_data[i + 2]);
+                accel[2] = (int16_t)((tmp_data[i + 5] << 8) | tmp_data[i + 4]);
+                i += 6;
+                have_accel = true;
             }
-        } else if (fh_mode == 1) {  // control frame
-            if (fh_parm == 0) {     // skip
-                while (1)
-                    ;
-            } else if (fh_parm == 1) {  // sensortime
-                                        // TODO
-                while (1)
-                    ;
-            } else if (fh_parm == 2) {  // fifo input config
-                                        // TODO
-                while (1)
-                    ;
-            }
+            bytes_to_read = 1;
         }
     } else {
-        int i = 1;
-        if (fh_parm & 4) {  // have mag
-            i += 6;
-        }
-        if (fh_parm & 2) {  // have gyr
-            gyro[0] = (int16_t)((tmp_data[i + 1] << 8) | tmp_data[i + 0]);
-            gyro[1] = (int16_t)((tmp_data[i + 3] << 8) | tmp_data[i + 2]);
-            gyro[2] = (int16_t)((tmp_data[i + 5] << 8) | tmp_data[i + 4]);
-            i += 6;
-            have_gyro = true;
-        }
-        if (fh_parm & 1) {  // have acc
-            accel[0] = (int16_t)((tmp_data[i + 1] << 8) | tmp_data[i + 0]);
-            accel[1] = (int16_t)((tmp_data[i + 3] << 8) | tmp_data[i + 2]);
-            accel[2] = (int16_t)((tmp_data[i + 5] << 8) | tmp_data[i + 4]);
-            i += 6;
-            have_accel = true;
-        }
-        bytes_to_read = 1;
+        mini_i2c_hw_fsm_reset();
     }
     if (have_gyro) {
         gctx.gyro_ring->Push((time - prev_gyro_time) * 1000, gyro[0], gyro[1], gyro[2], accel[0],
@@ -128,12 +131,8 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
         prev_gyro_time = time;
     }
 
-    if (bytes_to_read == 1) {
-        update_alarm(static_cast<int>(TIMER_SCALE * .01e-3));
-    } else {
-        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
-                                   nullptr);
-    }
+    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
+                               nullptr);
 }
 
 static bool IRAM_ATTR gyro_timer_cb(void* args) {
@@ -202,9 +201,12 @@ void gyro_bmi160_task(void* params) {
     timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, .1e-3 * TIMER_SCALE);
     timer_enable_intr(TIMER_GROUP_0, TIMER_0);
 
-    timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb_c, NULL, ESP_INTR_FLAG_IRAM);
+    // timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb_c, NULL, ESP_INTR_FLAG_IRAM);
 
-    timer_start(TIMER_GROUP_0, TIMER_0);
+    // timer_start(TIMER_GROUP_0, TIMER_0);
+
+    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
+                               nullptr);
 
     vTaskDelete(NULL);
 }
