@@ -570,7 +570,7 @@ static void background_scanner_task(void* param) {
         if (dp != NULL) {
             while ((ep = readdir(dp))) {
                 static constexpr char templ[] = "/spiflash/%s";
-                char buf[30], buf2[300];
+                char buf[30];
                 snprintf(buf, sizeof(buf), templ, ep->d_name);
                 struct stat st;
                 if (stat(buf, &st) == 0) {

@@ -9,6 +9,7 @@ extern "C" {
 #include <esp_log.h>
 #include <esp_check.h>
 #include <esp_attr.h>
+#include <esp_timer.h>
 
 #include "bus/mini_i2c.h"
 }
@@ -66,9 +67,6 @@ static const char *TAG = "gyro_mpu";
 
 #define FIFO_SAMPLE_SIZE 12
 
-#define TIMER_DIVIDER (16)
-#define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
-
 static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg);
 
 static void IRAM_ATTR gyro_i2c_cb(void *arg) {
@@ -90,10 +88,7 @@ static void IRAM_ATTR gyro_i2c_cb(void *arg) {
                              kFlagHaveAccel);
         prev_time = time;
     } else {
-        if (mini_i2c_get_status() != I2C_STATUS_NACK) {
-            while (1)
-                ;
-        }
+        mini_i2c_hw_fsm_reset();
     }
 
     mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
@@ -115,10 +110,7 @@ static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
                 ;
         }
     } else {
-        if (mini_i2c_get_status() != I2C_STATUS_NACK) {
-            while (1)
-                ;
-        }
+        mini_i2c_hw_fsm_reset();
     }
 
     if (fifo_bytes > 0) {

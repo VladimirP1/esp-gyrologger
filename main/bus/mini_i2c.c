@@ -1,21 +1,16 @@
+#include "mini_i2c_iram_workaround.h"
 #include "driver/gpio.h"
 #include "esp_check.h"
 #include "esp_intr_alloc.h"
 #include "esp_rom_gpio.h"
 #include "hal/gpio_hal.h"
-#include "hal/i2c_hal.h"
 #include "mini_i2c.h"
-#include "soc/i2c_periph.h"
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 #include <freertos/semphr.h>
-#include "soc/soc.h"
 #include <stdio.h>
 
 #define TAG "i2c"
-
-void periph_module_enable(periph_module_t periph);
-void periph_module_disable(periph_module_t periph);
 
 typedef struct {
     i2c_hal_context_t hal;
@@ -44,9 +39,9 @@ static void IRAM_ATTR i2c_isr_handler(void* arg) {
     if (evt_type == I2C_INTR_EVENT_NACK) {
         i2c_ctx.status = I2C_STATUS_NACK;
     } else if (evt_type == I2C_INTR_EVENT_TOUT) {
-        i2c_ctx.status = I2C_STATUS_FAIL;
+        i2c_ctx.status = I2C_STATUS_TIMEOUT;
     } else if (evt_type == I2C_INTR_EVENT_ARBIT_LOST) {
-        i2c_ctx.status = I2C_STATUS_FAIL;
+        i2c_ctx.status = I2C_STATUS_ARB_LOST;
     } else if (evt_type == I2C_INTR_EVENT_END_DET) {
         i2c_ctx.status = I2C_STATUS_IDLE;
     } else if (evt_type == I2C_INTR_EVENT_TRANS_DONE) {
@@ -62,20 +57,10 @@ static void IRAM_ATTR i2c_isr_handler(void* arg) {
     }
 }
 
-i2c_status_t IRAM_ATTR mini_i2c_get_status() {
-    return i2c_ctx.status;
-}
+i2c_status_t IRAM_ATTR mini_i2c_get_status() { return i2c_ctx.status; }
 
-static inline void mini_i2c_write_txfifo(i2c_hal_context_t* hal, uint8_t* ptr, uint8_t len) {
-    // TODO: handle i2c 0/1
-    uint32_t fifo_addr = 0x6001301c;
-    for (int i = 0; i < len; i++) {
-        WRITE_PERI_REG(fifo_addr, ptr[i]);
-    }
-}
-
-static esp_err_t i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int scl_io_num,
-                               bool sda_pullup_en, bool scl_pullup_en) {
+static esp_err_t IRAM_ATTR i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int scl_io_num,
+                                         bool sda_pullup_en, bool scl_pullup_en) {
     int sda_in_sig, sda_out_sig, scl_in_sig, scl_out_sig;
     sda_out_sig = i2c_periph_signal[i2c_num].sda_out_sig;
     sda_in_sig = i2c_periph_signal[i2c_num].sda_in_sig;
@@ -133,7 +118,7 @@ esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq) {
     i2c_hal_disable_intr_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);
     i2c_hal_clr_intsts_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);
     i2c_hal_master_init(&i2c_ctx.hal, 0);
-    i2c_hal_set_filter(&i2c_ctx.hal, 7);
+    i2c_hal_set_filter(&i2c_ctx.hal, 80);
     i2c_hal_set_tout(&i2c_ctx.hal, 10);
     mini_i2c_set_timing(freq);
 
@@ -314,7 +299,7 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, ui
 #undef SOC_I2C_SUPPORT_HW_CLR_BUS
 #define SOC_I2C_SUPPORT_HW_CLR_BUS 0
 
-static esp_err_t mini_i2c_master_clear_bus(i2c_port_t i2c_num) {
+esp_err_t IRAM_ATTR mini_i2c_master_clear_bus(i2c_port_t i2c_num) {
 #if !SOC_I2C_SUPPORT_HW_CLR_BUS
     const int scl_half_period = 5;  // use standard 100kHz data rate
     int i = 0;
@@ -353,7 +338,7 @@ static esp_err_t mini_i2c_master_clear_bus(i2c_port_t i2c_num) {
  *or SCL to ground, this would cause the I2C FSM get stuck in wrong state, all we can do is to reset
  *the I2C hardware in this case.
  **/
-esp_err_t mini_i2c_hw_fsm_reset() {
+esp_err_t IRAM_ATTR mini_i2c_hw_fsm_reset() {
     i2c_port_t i2c_num = 0;
 #if !SOC_I2C_SUPPORT_HW_FSM_RST
     int scl_low_period, scl_high_period;
@@ -371,9 +356,9 @@ esp_err_t mini_i2c_hw_fsm_reset() {
     i2c_hal_get_filter(&i2c_ctx.hal, &filter_cfg);
 
     // to reset the I2C hw module, we need re-enable the hw
-    periph_module_disable(i2c_periph_signal[0].module);
+    mini_i2c_disable_hw();
     mini_i2c_master_clear_bus(i2c_num);
-    periph_module_enable(i2c_periph_signal[0].module);
+    mini_i2c_enable_hw();
 
     i2c_hal_master_init(&i2c_ctx.hal, i2c_num);
     i2c_hal_disable_intr_mask(&i2c_ctx.hal, I2C_LL_INTR_MASK);

@@ -4,7 +4,7 @@
 
 #include <stdint.h>
 
-typedef enum { I2C_STATUS_IDLE, I2C_STATUS_FAIL, I2C_STATUS_NACK, I2C_STATUS_ACTIVE } i2c_status_t;
+typedef enum { I2C_STATUS_IDLE, I2C_STATUS_TIMEOUT, I2C_STATUS_ARB_LOST, I2C_STATUS_NACK, I2C_STATUS_ACTIVE } i2c_status_t;
 
 esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq);
 

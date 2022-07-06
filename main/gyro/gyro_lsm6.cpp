@@ -178,10 +178,8 @@ static bool IRAM_ATTR gyro_timer_cb(void* args) {
 bool probe_lsm6(uint8_t dev_adr) {
     static uint8_t data[1];
     if (mini_i2c_read_reg_sync(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
-        ESP_LOGW("gyro-prober", "read failed");
         return false;
     }
-    ESP_LOGI("gyro-prober", "ok %02X", data[0]);
     return data[0] == 0x6b;
 }
 

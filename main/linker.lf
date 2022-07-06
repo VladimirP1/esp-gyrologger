@@ -2,9 +2,18 @@
 archive: libdriver.a
 entries:
     gpio (noflash)
+    periph_ctrl (noflash)
+    rtc_io (noflash)
 
-[mapping:ext_soc]
+[mapping:ext_hal]
 archive: libhal.a
 entries:
     gpio_hal (noflash)
     i2c_hal (noflash)
+
+[mapping:ext_soc]
+archive: libsoc.a
+entries:
+    gpio_periph (noflash)
+    i2c_periph (noflash)
+    rtc_io_periph (noflash)
