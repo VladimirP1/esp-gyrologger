@@ -3,6 +3,7 @@
 #include "global_context.hpp"
 
 extern "C" {
+#include <hal/gpio_types.h>
 #include <driver/gpio.h>
 #include <driver/sigmadelta.h>
 
