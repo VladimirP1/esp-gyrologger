@@ -376,3 +376,11 @@ esp_err_t IRAM_ATTR mini_i2c_hw_fsm_reset() {
 #endif
     return ESP_OK;
 }
+
+
+esp_err_t mini_i2c_double_stop_timing(){
+    int scl_stop_hold, scl_stop_setup;
+    i2c_hal_get_stop_timing(&i2c_ctx.hal, &scl_stop_setup, &scl_stop_hold);
+    scl_stop_hold *= 2;
+    i2c_hal_set_stop_timing(&i2c_ctx.hal, scl_stop_setup, scl_stop_hold);
+}
