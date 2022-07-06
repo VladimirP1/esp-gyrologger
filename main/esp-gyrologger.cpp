@@ -15,9 +15,9 @@ extern "C" {
 #include <stdio.h>
 
 #include "storage/storage_fat.h"
-#include "misc/misc.h"
 }
 
+#include "misc/misc.hpp"
 #include "wifi/http.hpp"
 #include "wifi/wifi.hpp"
 #include "wifi/cam_control.hpp"

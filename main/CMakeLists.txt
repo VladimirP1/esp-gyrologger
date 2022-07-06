@@ -10,7 +10,7 @@ idf_component_register(
         "wifi/http.cpp" 
         # "bus/bus_i2c.c" 
         "bus/mini_i2c.c" 
-        # "misc/misc.c" 
+        "misc/misc.cpp" 
         "storage/storage_fat.c" 
         "wifi/wifi.cpp" 
         "wifi/random_names.cpp" 

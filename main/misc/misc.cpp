@@ -1,22 +1,25 @@
-#include "misc.h"
+#include "misc.hpp"
 
-#include "global_context.h"
+#include "global_context.hpp"
 
+extern "C" {
 #include <driver/gpio.h>
 #include <driver/sigmadelta.h>
 
 #include <freertos/task.h>
+}
 
-#define LED_GPIO 5
+#define LED_GPIO GPIO_NUM_23
 
 void led_task(void* params) {
     sigmadelta_config_t sigmadelta_cfg = {
         .channel = SIGMADELTA_CHANNEL_0,
-        .sigmadelta_prescale = 80,
         .sigmadelta_duty = 0,
+        .sigmadelta_prescale = 80,
         .sigmadelta_gpio = LED_GPIO,
     };
     sigmadelta_config(&sigmadelta_cfg);
+    gpio_set_drive_capability(LED_GPIO, GPIO_DRIVE_CAP_0);
 
     int duty = 0;
     bool dir = false;

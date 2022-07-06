@@ -61,6 +61,7 @@ void logger_task(void *params_pvoid) {
         }
 
         if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
+            gctx.logger_control.last_block_time_us = esp_timer_get_time();
             if (gctx.logger_control.active) {
                 gctx.logger_control.busy = true;
                 gctx.logger_control.total_samples_written += kBlockSize;

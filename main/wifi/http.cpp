@@ -221,86 +221,40 @@ static std::pair<int, int> get_free_space_kb() {
 }
 
 static esp_err_t status_get_handler(httpd_req_t* req) {
-    HANDLE(httpd_resp_send_chunk(req, R"--(
-    <table class="status_table">
-        <tr>
-            <td class="status_table_name_cell">Active</td>
-            <td class="status_value_table_cell">)--",
-                                 HTTPD_RESP_USE_STRLEN));
+    std::string resp;
 
-    HANDLE(httpd_resp_send_chunk(req, std::to_string(gctx.logger_control.busy).c_str(),
-                                 HTTPD_RESP_USE_STRLEN));
+    auto entry = [&resp](std::string name, std::string value) {
+        resp.append(R"--(<tr><td class="status_table_name_cell">)--");
+        resp.append(name);
+        resp.append(R"--(</td><td class="status_value_table_cell">)--");
+        resp.append(value);
+        resp.append(R"--(</td></tr>)--");
+    };
 
-    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
-        </tr>
-        <tr>
-            <td class="status_table_name_cell">Avg gyro sample int. (ns)</td>
-            <td class="status_value_table_cell">)--",
-                                 HTTPD_RESP_USE_STRLEN));
+    resp.append(R"--(<table class="status_table">)--");
 
-    HANDLE(httpd_resp_send_chunk(req,
-                                 std::to_string(gctx.logger_control.avg_sample_interval_ns).c_str(),
-                                 HTTPD_RESP_USE_STRLEN));
+    if (esp_timer_get_time() - gctx.logger_control.last_block_time_us > 2000000ULL) {
+        entry("I2C FAILURE", "1");
+    }
 
-    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
-        </tr>
-        <tr>
-            <td class="status_table_name_cell">Free space (kBytes)</td>
-            <td class="status_value_table_cell">)--",
-                                 HTTPD_RESP_USE_STRLEN));
+    entry("Active", std::to_string(gctx.logger_control.busy));
+
+    entry("Avg gyro sample int. (ns)", std::to_string(gctx.logger_control.avg_sample_interval_ns));
 
     auto free_space = get_free_space_kb();
-    HANDLE(httpd_resp_send_chunk(req, std::to_string(free_space.first).c_str(),
-                                 HTTPD_RESP_USE_STRLEN));
+    entry("Free space (kBytes)", std::to_string(free_space.first));
 
-    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
-        </tr>
-        <tr>
-            <td class="status_table_name_cell">Free heap size (kBytes)</td>
-            <td class="status_value_table_cell">)--",
-                                 HTTPD_RESP_USE_STRLEN));
+    entry("Free heap size (kBytes)", std::to_string(esp_get_free_heap_size() / 1024));
 
-    HANDLE(httpd_resp_send_chunk(req, std::to_string(esp_get_free_heap_size() / 1024).c_str(),
-                                 HTTPD_RESP_USE_STRLEN));
+    entry("Last log length (samples)", std::to_string(gctx.logger_control.total_samples_written));
 
-    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
-        </tr>
-    <tr>
-        <td class="status_table_name_cell">Last log length (samples)</td>
-        <td class="status_value_table_cell">)--",
-                                 HTTPD_RESP_USE_STRLEN));
+    entry("Last log length (Bytes)", std::to_string(gctx.logger_control.total_bytes_written));
 
-    HANDLE(httpd_resp_send_chunk(req,
-                                 std::to_string(gctx.logger_control.total_samples_written).c_str(),
-                                 HTTPD_RESP_USE_STRLEN));
+    entry("Last log avg rate (Bytes/min)", std::to_string(gctx.logger_control.avg_logging_rate_bytes_min));
 
-    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
-        </tr>
-    <tr>
-        <td class="status_table_name_cell">Last log length (Bytes)</td>
-        <td class="status_value_table_cell">)--",
-                                 HTTPD_RESP_USE_STRLEN));
+    resp.append("</table>");
 
-    HANDLE(httpd_resp_send_chunk(req,
-                                 std::to_string(gctx.logger_control.total_bytes_written).c_str(),
-                                 HTTPD_RESP_USE_STRLEN));
-
-    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
-        </tr>
-        <tr>
-            <td class="status_table_name_cell">Last log avg rate (Bytes/min)</td>
-            <td class="status_value_table_cell">)--",
-                                 HTTPD_RESP_USE_STRLEN));
-
-    HANDLE(httpd_resp_send_chunk(
-        req, std::to_string(gctx.logger_control.avg_logging_rate_bytes_min).c_str(),
-        HTTPD_RESP_USE_STRLEN));
-
-    HANDLE(httpd_resp_send_chunk(req, R"--(</td>
-        </tr>
-    </table>)--",
-                                 HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
+    HANDLE(httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
     return ESP_OK;
 }
 
