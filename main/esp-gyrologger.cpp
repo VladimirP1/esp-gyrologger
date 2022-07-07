@@ -55,7 +55,7 @@ void app_main_cpp(void) {
 
     gyro_probe_and_start_task();
 
-    // xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
+    xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
     // xTaskCreate(camera_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
 
     http_init();

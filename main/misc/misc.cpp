@@ -10,7 +10,7 @@ extern "C" {
 #include <freertos/task.h>
 }
 
-#define LED_GPIO GPIO_NUM_23
+#define LED_GPIO GPIO_NUM_5
 
 void led_task(void* params) {
     sigmadelta_config_t sigmadelta_cfg = {

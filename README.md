@@ -21,6 +21,9 @@ This is all you need (except wires), this should coust about $5:
 #### Option 2 - JLCPCB PCBA order
 Although the previous version of this PCB has been manufacted and assembled by hand, found bugs were fixed in this version, no guarantees that this version is bug-free.
 
+<img src="img/esplog_front.jpg" width="320"></img>
+<img src="img/esplog_back.jpg" width="320"></img>
+
 [EasyEDA project](https://oshwlab.com/vladimir.pinchuk01/gyro-logger-esp32c3_copy)
 
 ### Hardware prototypes
