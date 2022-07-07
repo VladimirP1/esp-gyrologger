@@ -86,8 +86,8 @@ static void IRAM_ATTR gyro_i2c_cb(void* arg) {
     static int16_t accel[3];
 
     static constexpr int64_t kGyroPrescale =
-        32768 * (35e-3 * 3.141592 / 180.0) / (1.0 / 32.8 * 3.141592 / 180.0);
-    static constexpr int64_t kAccelPrescale = 32768 * 0.488e-3 / (16.0 / 32767);
+        16777216 * (35e-3 * 3.141592 / 180.0) / (1.0 / 32.8 * 3.141592 / 180.0);
+    static constexpr int64_t kAccelPrescale = 16777216 * 0.488e-3 / (16.0 / 32767);
 
     if (mini_i2c_read_reg_get_result(tmp_data, bytes_to_read) == ESP_OK) {
         if (bytes_to_read == 2) {
@@ -106,14 +106,14 @@ static void IRAM_ATTR gyro_i2c_cb(void* arg) {
         } else {
             uint8_t tag = (tmp_data[0] >> 3);
             if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_GYRO) {
-                gyro[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kGyroPrescale / 32768;
-                gyro[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kGyroPrescale / 32768;
-                gyro[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kGyroPrescale / 32768;
+                gyro[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kGyroPrescale / 16777216;
+                gyro[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kGyroPrescale / 16777216;
+                gyro[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kGyroPrescale / 16777216;
                 have_gyro = true;
             } else if (tag == REG_FIFO_DATA_OUT_TAG_VALUE_TAG_ACCEL) {
-                accel[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kAccelPrescale / 32768;
-                accel[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kAccelPrescale / 32768;
-                accel[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kAccelPrescale / 32768;
+                accel[0] = (int16_t)((tmp_data[2] << 8) | tmp_data[1]) * kAccelPrescale / 16777216;
+                accel[1] = (int16_t)((tmp_data[4] << 8) | tmp_data[3]) * kAccelPrescale / 16777216;
+                accel[2] = (int16_t)((tmp_data[6] << 8) | tmp_data[5]) * kAccelPrescale / 16777216;
                 have_accel = true;
             }
             if (have_gyro) {
@@ -130,14 +130,14 @@ static void IRAM_ATTR gyro_i2c_cb(void* arg) {
             }
         }
     } else {
-        while (1)
-            ;
+        mini_i2c_hw_fsm_reset();
     }
     if (bytes_to_read == 2) {
-        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2, gyro_i2c_cb, nullptr));
+        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2,
+                                                   gyro_i2c_cb, nullptr));
     } else {
-        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA_OUT_TAG, 7, gyro_i2c_cb,
-                                   nullptr));
+        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA_OUT_TAG, 7,
+                                                   gyro_i2c_cb, nullptr));
     }
 }
 
@@ -168,7 +168,8 @@ void gyro_lsm6_task(void* params) {
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
     // clang-format on
 
-   ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2, gyro_i2c_cb, nullptr));
+    ESP_ERROR_CHECK(
+        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2, gyro_i2c_cb, nullptr));
 
     vTaskDelete(NULL);
 }
