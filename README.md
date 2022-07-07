@@ -19,10 +19,14 @@ This is all you need (except wires), this should coust about $5:
 * [USB-C breakout board](https://aliexpress.ru/item/1005002795893679.html)
 
 #### Option 2 - JLCPCB PCBA order
-Although the previous version of this PCB has been manufacted and assembled by hand, found bugs were fixed in this version, no guarantees that this version is bug-free.
+
+Four-layer 11 x 14 mm PCB with esp32-c3, 3.3v ldo and either bmi160 or lsm6dsr gyro.
+The side with the components can be submerged in epoxy, making the logger almost a perfect 11x14x2.5mm cube, so it is easier to glue to a camera.
 
 <img src="img/esplog_front.jpg" width="320"></img>
 <img src="img/esplog_back.jpg" width="320"></img>
+
+Although the previous version of this PCB has been manufacted and assembled by hand, found bugs were fixed in this version, no guarantees that this version is bug-free.
 
 [EasyEDA project](https://oshwlab.com/vladimir.pinchuk01/gyro-logger-esp32c3_copy)
 
