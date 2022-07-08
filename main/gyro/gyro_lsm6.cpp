@@ -153,7 +153,7 @@ bool probe_lsm6(uint8_t dev_adr) {
 }
 
 void gyro_lsm6_task(void* params) {
-    mini_i2c_set_timing(500000);
+    mini_i2c_set_timing(600000);
     mini_i2c_double_stop_timing();
     mini_i2c_double_stop_timing();
 
