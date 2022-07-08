@@ -47,6 +47,9 @@ static const char* TAG = "gyro_lsm6";
 #define REG_CTRL6_C 0x15
 #define REG_CTRL6_C_BIT_FTYPE_0 0
 
+#define REG_CTRL9_XL 0x18
+#define REG_CTRL9_XL_BIT_I3C_DISABLE 1
+
 #define REG_FIFO_STATUS1 0x3a
 
 #define REG_FIFO_STATUS2 0x3b
@@ -151,10 +154,14 @@ bool probe_lsm6(uint8_t dev_adr) {
 
 void gyro_lsm6_task(void* params) {
     mini_i2c_set_timing(500000);
+    mini_i2c_double_stop_timing();
+    mini_i2c_double_stop_timing();
 
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_SW_RESET));
 
     vTaskDelay(5);
+
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL9_XL, (3 << REG_CTRL9_XL_BIT_I3C_DISABLE));
 
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C,
                             (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
