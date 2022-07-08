@@ -1,6 +1,7 @@
 #include "misc.hpp"
 
 #include "global_context.hpp"
+#include "wifi/wifi.hpp"
 
 extern "C" {
 #include <hal/gpio_types.h>
@@ -11,6 +12,7 @@ extern "C" {
 }
 
 #define LED_GPIO GPIO_NUM_5
+#define BUTTON_GPIO GPIO_NUM_19
 
 void led_task(void* params) {
     sigmadelta_config_t sigmadelta_cfg = {
@@ -50,5 +52,44 @@ void led_task(void* params) {
                 goto duty_retry;
             }
         }
+    }
+}
+
+void button_task(void* params) {
+    gpio_set_direction(BUTTON_GPIO, GPIO_MODE_INPUT);
+
+    static constexpr int kDebounceThreshold = 6;
+    int debounce_counter = 0;
+
+    bool cur_state = false;
+    bool prev_state = false;
+
+    while (true) {
+        if (!gpio_get_level(BUTTON_GPIO)) {
+            if (debounce_counter == 1) {
+                cur_state = true;
+                debounce_counter = 0;
+            } else if (debounce_counter > 0) {
+                debounce_counter--;
+            } else {
+                debounce_counter = kDebounceThreshold;
+            }
+        } else {
+            cur_state = false;
+            debounce_counter = 0;
+        }
+
+        if (cur_state != prev_state && cur_state) {
+            gctx.logger_control.active = !gctx.logger_control.active;
+
+            if (gctx.logger_control.active) {
+                wifi_stop();
+            } else {
+                wifi_start();
+            }
+        }
+
+        prev_state = cur_state;
+        vTaskDelay(10 / portTICK_PERIOD_MS);
     }
 }

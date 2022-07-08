@@ -65,7 +65,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     }
 }
 
-void wifi_init_sta(std::string ssid) {
+static void wifi_init_sta(std::string ssid) {
     ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
                                                         &wifi_event_handler, NULL, NULL));
     ESP_ERROR_CHECK(esp_event_handler_instance_register(IP_EVENT, IP_EVENT_STA_GOT_IP,
@@ -80,16 +80,13 @@ void wifi_init_sta(std::string ssid) {
     ESP_LOGI(TAG, "wifi_init_sta finished.");
 }
 
-std::string generate_ssid() {
+static std::string generate_ssid() {
     uint8_t mac[6];
     ESP_ERROR_CHECK(esp_read_mac(mac, ESP_MAC_WIFI_SOFTAP));
     return "esplog_" + random_name(mac[3] << 16 | mac[4] << 8 | mac[5]);
 }
 
-void wifi_init_softap() {
-    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
-                                                        &wifi_event_handler, NULL, NULL));
-
+static void wifi_init_softap() {
     std::string ssid = generate_ssid();
     wifi_config_t wifi_config = {.ap = {.ssid_len = (uint8_t)ssid.length(),
                                         .channel = EXAMPLE_ESP_WIFI_CHANNEL,
@@ -138,7 +135,14 @@ void wifi_init() {
     wifi_init_config_t cfg = WIFI_INIT_CONFIG_DEFAULT();
     ESP_ERROR_CHECK(esp_wifi_init(&cfg));
 
+    ESP_ERROR_CHECK(esp_event_handler_instance_register(WIFI_EVENT, ESP_EVENT_ANY_ID,
+                                                        &wifi_event_handler, NULL, NULL));
+
     auto ssid = wifi_scan();
     // wifi_init_sta(ssid);
     wifi_init_softap();
 }
+
+void wifi_start() { wifi_init_softap(); }
+
+void wifi_stop() { esp_wifi_stop(); }
