@@ -12,6 +12,9 @@
 
 #define TAG "i2c"
 
+// #define I2C_GPIO_MODE GPIO_MODE_INPUT_OUTPUT_OD
+#define I2C_GPIO_MODE GPIO_MODE_INPUT_OUTPUT
+
 typedef struct {
     i2c_hal_context_t hal;
     intr_handle_t int_hndl;
@@ -69,7 +72,8 @@ static esp_err_t IRAM_ATTR i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int
     if (sda_io_num >= 0) {
         gpio_set_level(sda_io_num, 1);
         gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[sda_io_num], PIN_FUNC_GPIO);
-        gpio_set_direction(sda_io_num, GPIO_MODE_INPUT_OUTPUT_OD);
+        gpio_set_direction(sda_io_num, I2C_GPIO_MODE);
+        gpio_set_drive_capability(sda_io_num, GPIO_DRIVE_CAP_0);
 
         if (sda_pullup_en == GPIO_PULLUP_ENABLE) {
             gpio_set_pull_mode(sda_io_num, GPIO_PULLUP_ONLY);
@@ -82,7 +86,9 @@ static esp_err_t IRAM_ATTR i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int
     if (scl_io_num >= 0) {
         gpio_set_level(scl_io_num, 1);
         gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[scl_io_num], PIN_FUNC_GPIO);
-        gpio_set_direction(scl_io_num, GPIO_MODE_INPUT_OUTPUT_OD);
+        gpio_set_direction(scl_io_num, I2C_GPIO_MODE);
+        gpio_set_drive_capability(sda_io_num, GPIO_DRIVE_CAP_0);
+
         esp_rom_gpio_connect_out_signal(scl_io_num, scl_out_sig, 0, 0);
         esp_rom_gpio_connect_in_signal(scl_io_num, scl_in_sig, 0);
         if (scl_pullup_en == GPIO_PULLUP_ENABLE) {
