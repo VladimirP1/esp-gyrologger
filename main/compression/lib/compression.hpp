@@ -29,6 +29,8 @@ class Coder {
     int block_size;
     quat::base_type target_quality_deg{-1};
     int target_block_size{};
+    bool enable_pressure{};
+    int pressure_cnt{};
 
     std::vector<uint8_t> compressed_block;
 
@@ -52,40 +54,46 @@ class Coder {
                 R::from_raw_value(((int)update.z) << scale)};
     }
 
-    bool update_qp(int bytes_put, quat::base_type max_error) {
-        if (target_quality_deg >= quat::base_type{0} && !target_block_size) {
-            if (max_error > target_quality_deg) {
-                qp.scale -= 1;
-            } else if (max_error < target_quality_deg / quat::base_type{1.5}) {
-                qp.scale += 1;
-            } else {
-                return false;
-            }
-        } else if (target_quality_deg >= quat::base_type{0}) {
-            if (bytes_put > target_block_size) {
-                qp.scale += 1;
-            } else if (max_error > target_quality_deg) {
-                qp.scale -= 1;
-            } else if (max_error < target_quality_deg / quat::base_type{1.5}) {
-                qp.scale += 1;
-            } else {
-                return false;
-            }
+    bool update_qp(int bytes_put, quat::base_type max_error, int tr) {
+        if (enable_pressure && (tr == 0) && (++pressure_cnt % 10 == 0)) {
+            qp.scale += 1;
         } else {
-            if (bytes_put > target_block_size) {
-                qp.scale += 1;
-            } else if (bytes_put < target_block_size / 1.5) {
-                qp.scale -= 1;
+            if (target_quality_deg >= quat::base_type{0} && !target_block_size) {
+                if (max_error > target_quality_deg) {
+                    qp.scale -= 1;
+                } else if (!enable_pressure &&
+                           max_error < target_quality_deg / quat::base_type{1.5}) {
+                    qp.scale += 1;
+                } else {
+                    return false;
+                }
+            } else if (target_quality_deg >= quat::base_type{0}) {
+                if (bytes_put > target_block_size) {
+                    qp.scale += 1;
+                } else if (max_error > target_quality_deg) {
+                    qp.scale -= 1;
+                } else if (max_error < target_quality_deg / quat::base_type{1.5}) {
+                    qp.scale += 1;
+                } else {
+                    return false;
+                }
             } else {
-                return false;
+                if (bytes_put > target_block_size) {
+                    qp.scale += 1;
+                } else if (bytes_put < target_block_size / 1.5) {
+                    qp.scale -= 1;
+                } else {
+                    return false;
+                }
             }
-            qp.scale = std::max(std::min((int)qp.scale, 20), 8);
         }
+        qp.scale = std::max(std::min((int)qp.scale, 20), 8);
         return true;
     }
 
    public:
     struct BitrateModeConstantQuality {};
+    struct BitrateModeConstantQualityWithPressure {};
     struct BitrateModeConstantBitrate {};
     struct BitrateModeConstantQualityLimited {};
 
@@ -94,6 +102,10 @@ class Coder {
 
     explicit Coder(int block_size, BitrateModeConstantQuality m, double target_quality_deg)
         : block_size(block_size), target_quality_deg(target_quality_deg) {}
+
+    explicit Coder(int block_size, BitrateModeConstantQualityWithPressure m,
+                   double target_quality_deg)
+        : block_size(block_size), target_quality_deg(target_quality_deg), enable_pressure(true) {}
 
     explicit Coder(int block_size, BitrateModeConstantQualityLimited m, double target_quality_deg,
                    int max_block_size)
@@ -141,7 +153,7 @@ class Coder {
         size_t bytes_put{};
         quat::base_type max_angle_error_rad{};
         compressed_block.resize(2000);
-        for (int tr = 0; tr < 3; ++tr) {
+        for (int tr = 0; tr < 5; ++tr) {
             state = old_state;
 
             UpdateEncoder upd_enc(qp.scale);
@@ -210,7 +222,7 @@ class Coder {
 
             bytes_put = compressed_block.data() + compressed_block.size() - compressed_ptr;
 
-            if (!update_qp(bytes_put, max_angle_error_rad)) {
+            if (!update_qp(bytes_put, max_angle_error_rad, tr)) {
                 break;
             }
         }
