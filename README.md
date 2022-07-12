@@ -18,7 +18,7 @@ This is all you need (except wires), this should coust about $5:
 * [AMS1117 3.3v LDO](https://aliexpress.ru/item/32659371619.html)
 * [USB-C breakout board](https://aliexpress.ru/item/1005002795893679.html)
 
-#### Option 2 - JLCPCB PCBA order
+#### Option 2 - Custom PCB
 
 Four-layer 11 x 14 mm PCB with esp32-c3, 3.3v ldo and either bmi160 or lsm6dsr gyro.
 The side with the components can be submerged in epoxy, making the logger almost a perfect 11x14x2.5mm cube, so it is easier to glue to a camera.
