@@ -119,7 +119,7 @@ inline quat::quat(base_type w, base_type x, base_type y, base_type z) : w(w), x(
 
 inline quat::quat(const vec &aa) {
     const base_type theta_squared = aa.x * aa.x + aa.y * aa.y + aa.z * aa.z;
-    if (theta_squared > base_type{0}) {
+    if (theta_squared > base_type::from_raw_value(16)) {
         const base_type theta = fpm::sqrt(theta_squared);
         const base_type half_theta = theta * base_type{0.5};
         const base_type k = fpm::sin(half_theta) / theta;

@@ -217,6 +217,11 @@ class GyroRing {
                 gyro.z = notches_[i + 24]->apply(gyro.z);
             }
 
+            if (fpm::abs(gyro.x) > quat::base_type{2} || fpm::abs(gyro.y) > quat::base_type{2} || fpm::abs(gyro.z) > quat::base_type{2}) {
+                ESP_LOGW("ring", "Filter unstable?");
+                gyro = {};
+            }
+
             quat_rptr_ = (accel_correction_ * quat_rptr_ * quat::quat{gyro});
 
             if (rs.flags & kFlagHaveAccel) {
