@@ -16,6 +16,7 @@ typedef struct {
     GyroRing* gyro_ring;
 
     uint8_t gyro_i2c_adr;
+    double gyro_sr;
 
     volatile bool pause_polling;
     volatile bool continue_polling;

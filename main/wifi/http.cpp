@@ -547,7 +547,7 @@ static void background_scanner_task(void* param) {
 void http_init() {
     file_list_mtx = xSemaphoreCreateMutex();
 
-    xTaskCreate(background_scanner_task, "background-scanner", 2048, nullptr,
+    xTaskCreate(background_scanner_task, "background-scanner", 3084, nullptr,
                 configMAX_PRIORITIES - 10, nullptr);
 
     static httpd_handle_t server = NULL;

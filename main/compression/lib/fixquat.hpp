@@ -96,6 +96,9 @@ struct quat {
     inline quat(const quat &q);
 
     inline quat &operator+=(const quat &b);
+    inline quat operator+(const quat &b) const;
+    inline quat &operator-=(const quat &b);
+    inline quat operator-(const quat &b) const;
     inline quat &operator*=(const quat &b);
     inline quat operator*(const quat &b) const;
     inline quat operator*(base_type b) const;
@@ -149,6 +152,26 @@ inline quat &quat::operator+=(const quat &q) {
     y += q.y;
     z += q.z;
     return *this;
+}
+
+inline quat quat::operator+(const quat &q) const {
+    quat ret = *this;
+    ret += q;
+    return ret;
+}
+
+inline quat &quat::operator-=(const quat &q) {
+    w -= q.w;
+    x -= q.x;
+    y -= q.y;
+    z -= q.z;
+    return *this;
+}
+
+inline quat quat::operator-(const quat &q) const {
+    quat ret = *this;
+    ret -= q;
+    return ret;
 }
 
 inline quat &quat::operator*=(const quat &q) {

@@ -44,8 +44,8 @@ static char file_name_buf[30];
 void logger_task(void *params_pvoid) {
     FILE *f = NULL;
 
-    Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityLimited(), .02 * M_PI / 180.0,
-                  kBlockSize * 2);
+    // Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityWithPressure(), .02 * M_PI / 180.0);
+    Coder encoder(kBlockSize, Coder::BitrateModeConstantQP(), 13);
 
     TickType_t prev_dump = xTaskGetTickCount();
     for (int i = 0;; ++i) {
@@ -127,7 +127,7 @@ void logger_task(void *params_pvoid) {
         }
 
         static int flush_gate = 0;
-        if (f && (++flush_gate) % 25 == 0) {
+        if (f && (++flush_gate) % 40 == 0) {
             if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
                 gctx.logger_control.total_bytes_written = ftell(f);
                 int log_duration_ms =

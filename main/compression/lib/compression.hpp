@@ -55,6 +55,14 @@ class Coder {
     }
 
     bool update_qp(int bytes_put, quat::base_type max_error, int tr) {
+        if (target_block_size < 0) {
+            if (qp.scale != -target_block_size) {
+                qp.scale = -target_block_size;
+                return true;
+            } else {
+                return false;
+            }
+        }
         if (enable_pressure && (tr == 0) && (++pressure_cnt % 10 == 0)) {
             qp.scale += 1;
         } else {
@@ -92,10 +100,14 @@ class Coder {
     }
 
    public:
+    struct BitrateModeConstantQP {};
     struct BitrateModeConstantQuality {};
     struct BitrateModeConstantQualityWithPressure {};
     struct BitrateModeConstantBitrate {};
     struct BitrateModeConstantQualityLimited {};
+
+    explicit Coder(int block_size, BitrateModeConstantQP m, int qp)
+        : block_size(block_size), target_block_size(-qp) {}
 
     explicit Coder(int block_size, BitrateModeConstantBitrate m, int target_block_size)
         : block_size(block_size), target_block_size(target_block_size) {}

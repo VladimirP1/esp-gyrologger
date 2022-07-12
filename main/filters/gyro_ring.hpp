@@ -3,6 +3,8 @@
 #include "compression/lib/fixquat.hpp"
 #include "global_context.hpp"
 
+#include "dyn_notch.hpp"
+
 extern "C" {
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
@@ -168,6 +170,11 @@ class GyroRing {
         taskEXIT_CRITICAL_ISR(&ptr_mux_);
     }
 
+    static float pt1FilterGain(float f_cut, float dT) {
+        float RC = 1 / (2 * M_PI * f_cut);
+        return dT / (RC + dT);
+    }
+
     quat::quat *Work() {
         taskENTER_CRITICAL(&ptr_mux_);
         int cached_wptr = wptr_;
@@ -180,7 +187,7 @@ class GyroRing {
             quats_chunk_.clear();
         }
 
-        // Integrate gyro
+        // Integrate gyro and LPF
         while (rptr_ != cached_wptr) {
             auto &s = ring_[rptr_];
             auto &rs = std::get<raw_sample>(s.sample);
@@ -190,19 +197,40 @@ class GyroRing {
             float gscale = kGyroToRads * s.duration_ns / 1e9;
             auto gyro = quat::vec{quat::base_type{gscale * rs.gx}, quat::base_type{gscale * rs.gy},
                                   quat::base_type{gscale * rs.gz}};
+
+            static quat::base_type pt1gain{};
+            if (pt1gain == quat::base_type{}) {
+                pt1gain = quat::base_type{pt1FilterGain(150, 1. / gctx.gyro_sr)};
+            }
+            gyro.x = sx_ = sx_ + pt1gain * (gyro.x - sx_);
+            gyro.y = sy_ = sy_ + pt1gain * (gyro.y - sy_);
+            gyro.z = sz_ = sz_ + pt1gain * (gyro.z - sz_);
+
+            for (int i = 0; i < 6; ++i) {
+                if (!notches_[i]) {
+                    notches_[i] = new DynamicNotch(gctx.gyro_sr);
+                    notches_[i + 12] = new DynamicNotch(gctx.gyro_sr);
+                    notches_[i + 24] = new DynamicNotch(gctx.gyro_sr);
+                }
+                gyro.x = notches_[i]->apply(gyro.x);
+                gyro.y = notches_[i + 12]->apply(gyro.y);
+                gyro.z = notches_[i + 24]->apply(gyro.z);
+            }
+
             quat_rptr_ = (accel_correction_ * quat_rptr_ * quat::quat{gyro});
 
             if (rs.flags & kFlagHaveAccel) {
                 quat::base_type ascale{kAccelToG / 16.0};
                 quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
+                quat::quat corr;
                 if (accel.norm() > quat::base_type{0.9 / 16.0} &&
                     accel.norm() < quat::base_type{1.1 / 16.0}) {
                     accel = accel.normalized();
                     quat::vec gp = quat_rptr_.rotate_point(accel);
                     auto dq0 = (gp.z + quat::base_type{1.0}) * quat::base_type{0.5};
-                    auto corr = quat::quat(quat::base_type{dq0}, -gp.y / quat::base_type{2.0},
-                                           gp.x / quat::base_type{2.0}, quat::base_type{0.0})
-                                    .normalized();
+                    corr = quat::quat(quat::base_type{dq0}, -gp.y / quat::base_type{2.0},
+                                      gp.x / quat::base_type{2.0}, quat::base_type{0.0})
+                               .normalized();
 
                     if (loglevel >= 3) {
                         static uint8_t cnt;
@@ -211,12 +239,12 @@ class GyroRing {
                                    ((double)(corr.axis_angle() / quat::base_type{4}).norm()) * 4 *
                                        180.0 / M_PI);
                     }
-                    accel_correction_ =
-                        quat::quat{(corr.axis_angle() * quat::base_type{-0.0001 * .01}) +
-                                   (accel_correction_.axis_angle() * quat::base_type{.99})};
                 } else {
-                    accel_correction_ = {};
+                    corr = {};
                 }
+                accel_correction_ =
+                    quat::quat{(corr.axis_angle() * quat::base_type{-0.0001 * .01}) +
+                               (accel_correction_.axis_angle() * quat::base_type{.99})};
             }
 
             MaybeNormalize(quat_rptr_);
@@ -235,7 +263,7 @@ class GyroRing {
 
         // ESP_LOGI(kLogTag, "%d %u", samples_buffered, ring_[sptr_].duration_ns);
 
-        // // Resample the quaternions
+        // Quaternion interpolation
         samples_buffered -= kResamlpingLag;
 
         if (quats_chunk_.size() >= chunk_size_) {
@@ -268,47 +296,18 @@ class GyroRing {
                 }
             }
             {  // Interpolate
-                quat::quat q{{}, {}, {}, {}};
-                quat::base_type k{};
-                quat::base_type k_sum{};
+                int next_sptr = (sptr_ + 1) % ring_.size();
+                quat::base_type k2 = quat::base_type{static_cast<float>(interp_ts_ - sptr_ts_) /
+                                                     ring_[next_sptr].duration_ns},
+                                k1 = quat::base_type{1} - k2;
+                quat::quat q = std::get<quat::quat>(ring_[sptr_].sample) * k1 +
+                               std::get<quat::quat>(ring_[next_sptr].sample) * k2;
 
-                int dbg_cnt{};
                 int cached_sptr = (sptr_ + 1) % ring_.size();
                 int cached_sptr_ts = sptr_ts_ + ring_[cached_sptr].duration_ns;
-                // to the right
-                while ((k = Kernel((cached_sptr_ts - interp_ts_) / 1000)) != quat::base_type{}) {
-                    q += std::get<quat::quat>(ring_[cached_sptr].sample) * k;
-                    k_sum += k;
-                    cached_sptr = (cached_sptr + 1) % ring_.size();
-                    cached_sptr_ts += ring_[cached_sptr].duration_ns;
-                    if (!ring_[cached_sptr].duration_ns) break;
-                    ++dbg_cnt;
-                }
-                // to the left
-                cached_sptr = sptr_;
-                cached_sptr_ts = sptr_ts_;
-                while ((k = Kernel((interp_ts_ - cached_sptr_ts) / 1000)) != quat::base_type{}) {
-                    q += std::get<quat::quat>(ring_[cached_sptr].sample) * k;
-                    k_sum += k;
-                    if (!ring_[cached_sptr].duration_ns) break;
-                    cached_sptr_ts -= ring_[cached_sptr].duration_ns;
-                    cached_sptr = (cached_sptr + ring_.size() - 1) % ring_.size();
-                    ++dbg_cnt;
-                }
+
                 interp_ts_ += desired_interval_ * 1000;
 
-                if (loglevel >= 3) {
-                    static uint8_t xx{};
-                    if (!++xx) {
-                        ESP_LOGI(kLogTag, "rg %d %u", dbg_cnt, ring_[cached_sptr].duration_ns);
-                    }
-                }
-                if (k_sum != quat::base_type{}) {
-                    q.w /= k_sum;
-                    q.x /= k_sum;
-                    q.y /= k_sum;
-                    q.z /= k_sum;
-                }
                 quats_chunk_.push_back(q);
                 if (quats_chunk_.size() >= chunk_size_) {
                     if (loglevel >= 2) {
@@ -325,21 +324,6 @@ class GyroRing {
     void MaybeNormalize(quat::quat &q) {
         static uint8_t x = 0;
         if ((++x % 16) == 0) q = q.normalized();
-    }
-
-    static quat::base_type sinc(quat::base_type x) {
-        x = x * quat::base_type::pi();
-        if (fpm::abs(x) < quat::base_type{1e-04})
-            return quat::base_type{1} +
-                   x * x * (quat::base_type{-1.0 / 6.0} + x * x * quat::base_type{1.0 / 120.0});
-        return fpm::sin(x) / x;
-    }
-
-    quat::base_type Kernel(uint32_t t) {
-        if (t < 3 * desired_interval_) {
-            return sinc(inv_desired_interval_ * t) * sinc(inv_desired_interval_ * (t / 3));
-        }
-        return {};
     }
 
    private:
@@ -360,6 +344,9 @@ class GyroRing {
     int rptr_{}, sptr_{};
     quat::quat quat_rptr_{};
     quat::quat accel_correction_{};
+
+    DynamicNotch *notches_[36] = {};
+    quat::base_type sx_, sy_, sz_;
 
     std::vector<quat::quat> quats_chunk_;
 };

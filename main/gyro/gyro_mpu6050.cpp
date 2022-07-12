@@ -131,6 +131,8 @@ bool probe_mpu6050(uint8_t dev_adr) {
 }
 
 void gyro_mpu6050_task(void *params_pvoid) {
+    gctx.gyro_sr = 1000.0;
+    
     /* Mpu6050 needs larger delays between transfers */
     mini_i2c_double_stop_timing();
     mini_i2c_double_stop_timing();

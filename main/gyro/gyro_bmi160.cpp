@@ -50,8 +50,6 @@ static void IRAM_ATTR update_alarm(uint64_t dt) {
     timer_group_set_counter_enable_in_isr(TIMER_GROUP_0, TIMER_0, TIMER_START);
 }
 
-static SemaphoreHandle_t time_mtx;
-static uint64_t cur_gyro_time = 0;
 static uint64_t prev_gyro_time = 0;
 
 static int bytes_to_read = 1;
@@ -135,23 +133,6 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
                                nullptr);
 }
 
-static bool IRAM_ATTR gyro_timer_cb(void* args) {
-    if (gctx.terminate_for_update) {
-        return false;
-    }
-
-    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
-                               nullptr);
-
-    update_alarm(static_cast<int>(TIMER_SCALE * 10e-3));
-
-    return false;
-}
-
-extern "C" {
-static bool IRAM_ATTR gyro_timer_cb_c(void* args) { return gyro_timer_cb(args); }
-}
-
 bool probe_bmi160(uint8_t dev_adr) {
     uint8_t data[1];
     if (mini_i2c_read_reg_sync(dev_adr, 0x00, data, 1) != ESP_OK) {
@@ -161,8 +142,8 @@ bool probe_bmi160(uint8_t dev_adr) {
 }
 
 void gyro_bmi160_task(void* params) {
-    time_mtx = xSemaphoreCreateMutex();
-
+    gctx.gyro_sr = 3300.0;
+    
     for (int i = 0; i < 10; ++i) {
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb6);  // reset
         vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -183,27 +164,10 @@ void gyro_bmi160_task(void* params) {
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_CONF, 0b00101000);
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00101101);
+    // mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00001100); // 1.6k sample rate, 136hz LPF
 
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0, 0);
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);
-
-    timer_config_t config = {
-        .alarm_en = TIMER_ALARM_EN,
-        .counter_en = TIMER_PAUSE,
-        .counter_dir = TIMER_COUNT_UP,
-        .auto_reload = TIMER_AUTORELOAD_EN,
-        .divider = TIMER_DIVIDER,
-    };
-    timer_init(TIMER_GROUP_0, TIMER_0, &config);
-
-    timer_set_counter_value(TIMER_GROUP_0, TIMER_0, 0);
-
-    timer_set_alarm_value(TIMER_GROUP_0, TIMER_0, .1e-3 * TIMER_SCALE);
-    timer_enable_intr(TIMER_GROUP_0, TIMER_0);
-
-    // timer_isr_callback_add(TIMER_GROUP_0, TIMER_0, gyro_timer_cb_c, NULL, ESP_INTR_FLAG_IRAM);
-
-    // timer_start(TIMER_GROUP_0, TIMER_0);
 
     mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
                                nullptr);
