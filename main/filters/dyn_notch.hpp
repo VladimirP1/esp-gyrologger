@@ -21,7 +21,9 @@ class DynamicNotch {
         ft b0 = gain, b1 = ft{-2.0} * cs * gain, b2 = b0, a1 = b1, a2 = ft{2.0} * gain - ft{1.0};
         ft out = ft{inp * b0 + x[1] * b1 + x[0] * b2 - y[1] * a1 - y[0] * a2};
 
-        ft update = gain * (x[1] - y[1]) * 1000 * out * 1000 * -4;
+        ft update0 = gain * (x[1] - y[1]) * 300 * out * 300 * -4;
+        const ft k {.02};
+        update = update + k * (update0 - update);
         if (update > da_max) update = da_max;
         if (update < -da_max) update = -da_max;
         cs -= update;
@@ -38,7 +40,7 @@ class DynamicNotch {
 
    private:
     ft cs{}, gain{};
-    ft x[2] = {}, y[2] = {};
+    ft x[2] = {{},{}}, y[2] = {{},{}};
     ft a_min{}, a_max{}, da_max{};
     ft lr{}, update{};
 };
