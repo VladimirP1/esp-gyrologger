@@ -131,7 +131,7 @@ bool probe_mpu6050(uint8_t dev_adr) {
 }
 
 void gyro_mpu6050_task(void *params_pvoid) {
-    gctx.gyro_sr = 1000.0;
+    gctx.gyro_sr = 2000.0;
     
     /* Mpu6050 needs larger delays between transfers */
     mini_i2c_double_stop_timing();
@@ -153,7 +153,7 @@ void gyro_mpu6050_task(void *params_pvoid) {
 
     ESP_ERROR_CHECK(
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_SMPRT_DIV, 7));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_SMPRT_DIV, 3));
     ESP_ERROR_CHECK(
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYRO_CONFIG,
                                 REG_GYRO_CONFIG_VALUE_FS_1000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
