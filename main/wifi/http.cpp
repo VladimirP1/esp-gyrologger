@@ -250,7 +250,8 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
 
     entry("Last log length (Bytes)", std::to_string(gctx.logger_control.total_bytes_written));
 
-    entry("Last log avg rate (Bytes/min)", std::to_string(gctx.logger_control.avg_logging_rate_bytes_min));
+    entry("Last log avg rate (Bytes/min)",
+          std::to_string(gctx.logger_control.avg_logging_rate_bytes_min));
 
     resp.append("</table>");
 
@@ -280,9 +281,9 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
         resp.append(std::to_string(f.second));
         resp.append("KB</td>");
         resp.append(
-            R"--(<td><button style="color:black;" class="delete_btn"  onclick="post_command('unlink=)--");
+            R"--(<td><div style="color:black;display:inline-block;" class="delete_btn"  onclick="post_command('unlink=)--");
         resp.append(f.first);
-        resp.append(R"--(')">&#x274c;</button></td></tr>)--");
+        resp.append(R"--(')">&#x274c;</div></td></tr>)--");
     }
     resp.append("</table>");
     xSemaphoreGive(file_list_mtx);
@@ -295,25 +296,7 @@ static const httpd_uri_t files_get = {
 
 static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, html_prefix, HTTPD_RESP_USE_STRLEN));
-
-    HANDLE(httpd_resp_send_chunk(req, R"--(<body><h1>EspLog <div id="network_activity"></div></h1>
-    <h2>Control</h2>
-    <button style="color:green;" class="command_btn" onclick="post_command('command=calibrate')">0</button>
-    <button style="color:red;" class="command_btn" onclick="post_command('command=record')">&#x23fa;</button>
-    <button style="color:black;" class="command_btn" onclick="post_command('command=stop')">&#x23F9;</button>
-
-    <h2 id="status_label">Status</h2>
-     <div id="status_table">
-    Loading...
-    </div>
-    <h2 id="files_label">Log download</h2>
-     <div id="files_table">
-    Loading...
-    </div>
-    <form id="form_simple" method="post" action=""></form>
-</body>)--",
-                                 HTTPD_RESP_USE_STRLEN));
-
+    HANDLE(httpd_resp_send_chunk(req, html_body, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_xhr_status_updater, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder, HTTPD_RESP_USE_STRLEN));

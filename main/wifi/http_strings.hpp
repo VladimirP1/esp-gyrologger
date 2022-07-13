@@ -13,18 +13,111 @@ const char html_prefix[] = R"--(
 
 constexpr char html_suffix[] = "</html>";
 
+const char html_body[] = R"--(
+    <body>
+    <h1>EspLog</h1>
+    <div class="container">
+    <div class="column ">
+        <div class="center button_cloumn" style="max-width: 33rem;">
+            <svg class="rec_btn command_btn" viewBox="0 0 24 24" onclick="post_command('command=record')" x="0px"
+                y="0px" width="24" height="24">
+                <circle cx="12" cy="12" r="4" fill="#ff0000" />
+            </svg>
+            <svg class="stop_btn command_btn" viewBox="0 0 24 24" onclick="post_command('command=stop')" x="0px" y="0px"
+                width="24" height="24">
+                <path d="M 8 8 L 16 8 L 16 16 L 8 16 L 8 8" fill="#000000" />
+            </svg>
+            <svg class="calibrate_btn command_btn" viewBox="0 0 24 24" onclick="post_command('command=calibrate')"
+                x="0px" y="0px" width="24" height="24">
+                <circle cx="12" cy="12" r="4" stroke="#42ab05" stroke-width="1" fill="#00000000" />
+            </svg>
+        </div>
+    </div>
+    <div class="column">
+        <div class="center status_column" style="max-width: 33rem;">
+            <div id="network_activity"></div>
+            <div id="status_table">
+                Loading...
+            </div>
+        </div>
+    </div>
+    <div class="column">
+        <div class="center download_column" style="max-width: 33rem;min-height:1rem;">
+             <div id="files_table">
+                Loading...
+            </div>
+        </div>
+    </div>
+    </div>
+</body>)--";
+
 const char html_stylesheet[] = R"--(
 <style>
+    .rec_btn {
+        background-color: #ff99c4;
+    }
+
+    .stop_btn {
+        background-color: #ffe499;
+    }
+
+    .calibrate_btn {
+        background-color: #a7d6fc;
+    }
+
     .command_btn {
-        width: 4rem;
-        height: 4rem;
-        font-size: 2rem;
-        border-radius: .5rem;
-        border: .2rem solid gray;
+        height: auto;
+        float: left;
+        width: 33.33%;
+        padding: 0;
+        margin: 0;
+    }
+
+    .command_btn:active {
+        background-color: #505050;
+    }
+
+    .cmd_btns:after {
+        content: "";
+        display: table;
+        clear: both;
+    }
+    .container {
+        display: flex;
+        flex-wrap: wrap;
+    }
+
+    .button_cloumn {
+        background-color: aliceblue;
+    }
+
+    .center {
+        margin-left: auto;
+    margin-right: auto;
+    }
+
+    .status_column {
+        background-color:bisque;
+    }
+
+    .download_column {
+        background-color: cornsilk;
+    }
+    .column {
+        flex-grow: 1;
+        flex-basis: 33%;
+        padding-left: .1rem;
+        padding-right: .1rem;
+    }
+
+    @media screen and (max-width: 62rem) {
+        .column {
+            flex-basis: 100%;
+        }
     }
 
     .status_table {
-        font-size: 1.5rem;
+        font-size: 1.2rem;
         font-style: bold;
     }
 
@@ -37,7 +130,7 @@ const char html_stylesheet[] = R"--(
     }
 
     .download_table {
-        font-size: 1.5rem;
+        font-size: 2rem;
     }
 
     .download_table_name_cell {
@@ -49,16 +142,18 @@ const char html_stylesheet[] = R"--(
         padding: 0 0 0 0;
     }
 
+    .delete_btn:active {
+        background-color: #505050;
+    }
+
     .download_table_mid_cell {
         padding-left: 1rem;
         padding-right: 1rem;
     }
 
     #network_activity {
-        display: inline-block;
-        width: 1rem;
-        height: 1rem;
-        border-radius: 1rem;
+        width: 100%;
+        height: 0.5rem;
     }
 </style>
 )--";
@@ -123,17 +218,12 @@ const char js_xhr_status_updater[] = R"--(
         files_last_update = (new Date()).getTime();});
 
     setInterval(()=>{ 
-        let status_label = document.getElementById("status_label");
-        let files_label = document.getElementById("files_label");
+        let activity_div = document.getElementById("network_activity");
         if ((new Date()).getTime() - status_last_update > 2000) {
-            status_label.style.color = "red";
-        } else {
-            status_label.style.color = "black";
+            activity_div.style.backgroundColor = "red";
         }
         if ((new Date()).getTime() - files_last_update > 2000) {
-            files_label.style.color = "red";
-        } else {
-            files_label.style.color = "black";
+            activity_div.style.backgroundColor = "red";
         }
     }, 1000);
 
