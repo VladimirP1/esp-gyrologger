@@ -10,6 +10,12 @@ The following IMUs can be used over the i2c bus:
 * MPU-6050 / MPU-6000
 * LSM6DSR (not recommended)
 
+### Screenshots
+
+<img src="img/screenshot_main.png" width="540"></img>
+
+<img src="img/screenshot_settings.png" width="540"></img>
+
 ### How to build
 #### Option 1 - from modules
 This is all you need (except wires), this should coust about $5:
