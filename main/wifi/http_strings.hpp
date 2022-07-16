@@ -110,7 +110,7 @@ const char html_stylesheet[] = R"--(
         padding-right: .1rem;
     }
 
-    @media screen and (max-width: 62rem) {
+    @media screen and (max-width: 67rem) {
         .column {
             flex-basis: 100%;
         }
@@ -156,6 +156,45 @@ const char html_stylesheet[] = R"--(
         height: 0.5rem;
     }
 </style>
+)--";
+
+const char settings_style[] = R"--(
+    <style>
+    .setting_name {
+        font-weight: bold;
+    }
+
+    .apply_btn {
+        background-color: lightgreen;
+        font-weight: bold;
+    }
+
+    .apply_btn:active {
+        background-color: gray;
+    }
+
+    .cell {
+        padding-left: 0.5em;
+        padding-right: 0.5em;
+    }
+    </style>
+)--";
+
+const char js_settings[] = R"--(
+    <script type="text/javascript">
+    function apply_setting(s) {
+        let elem = document.getElementById(s);
+        let btn_elem = document.getElementById(s + "__btn");
+        btn_elem.style.color="red";
+        let xhr = new XMLHttpRequest();
+        xhr.open('POST', '/settings');
+        xhr.onload = function() {
+            btn_elem.style.color="black";
+        };
+        xhr.send(s + "=" + elem.value);
+        xhr.timeout = 10000;
+    }
+    </script>
 )--";
 
 const char js_xhr_status_updater[] = R"--(
@@ -234,6 +273,52 @@ const char js_xhr_status_updater[] = R"--(
         xhr.timeout = 10000;
     }
 </script>)--";
+
+const char html_update_uploader[] = R"--(
+    <div>
+        <p style="font-weight:bold; color:red; font-size:1.2em;">WARNING: make sure you select the correct firmware,
+            there is NO verification and NO integrity checking!</p>
+        <p style="font-weight:bold">Update firmware</p>
+        <input id="file_input" type="file">
+        <button id="upload_button" type="button" onclick="upload()">Upload</button>
+        <div id="upload_log"></div>
+    </div>
+)--";
+
+const char js_update_uploader[] = R"--(
+    <script>
+    function upload() {
+        let fileInput = document.getElementById("file_input").files;
+        let file = fileInput[0];
+        let xhttp = new XMLHttpRequest();
+        let log_elem = document.getElementById("upload_log");
+        log_elem.innerHTML = "";
+        let line = document.createElement("p");
+        line.innerText = "Starting upload!";
+        line.style.color = "green";
+        log_elem.appendChild(line);
+        
+        xhttp.timeout = 40000;
+        xhttp.onreadystatechange = function () {
+            if (xhttp.readyState == 4) {
+                if (xhttp.status == 200) {
+                    let line = document.createElement("p");
+                    line.innerText = "Upload done, update should start automatically. This will take some time. Please, wait for more than 30 seconds and then power-cycle the device";
+                    line.style.color = "green";
+                    log_elem.appendChild(line);
+                } else {
+                    let line = document.createElement("p");
+                    line.innerText = "Update failed. Wait around 30 seconds, reboot the device and try again.";
+                    line.style.color = "red";
+                    log_elem.appendChild(line);
+                }
+            }
+        };
+        xhttp.open("POST", "/update", true);
+        xhttp.send(file);
+    }
+</script>
+)--";
 
 const char js_wasm_decoder[] = R"--(<script type="text/javascript">
 var wasm = [

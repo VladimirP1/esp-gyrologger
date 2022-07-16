@@ -24,6 +24,7 @@ extern "C" {
 #include "gyro/gyro.hpp"
 #include "logger/logger.hpp"
 #include "filters/gyro_ring.hpp"
+#include "storage/settings.hpp"
 
 #include "global_context.hpp"
 
@@ -47,9 +48,10 @@ void app_main_cpp(void) {
 
     ESP_ERROR_CHECK(mini_i2c_init(6, 7, 400000));
 
+    gctx.settings_manager = new SettingsManager();
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
     gctx.gyro_ring = new GyroRing();
-    gctx.gyro_ring->Init(2048, kBlockSize, 1800);
+    gctx.gyro_ring->Init(3072, kBlockSize, 1800);
 
     xTaskCreate(logger_task, "logger", 3084, NULL, configMAX_PRIORITIES - 3, NULL);
 

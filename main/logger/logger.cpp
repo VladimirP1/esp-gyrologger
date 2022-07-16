@@ -45,7 +45,7 @@ void logger_task(void *params_pvoid) {
     FILE *f = NULL;
 
     // Coder encoder(kBlockSize, Coder::BitrateModeConstantQualityWithPressure(), .02 * M_PI / 180.0);
-    Coder encoder(kBlockSize, Coder::BitrateModeConstantQP(), 13);
+    Coder encoder(kBlockSize, Coder::BitrateModeConstantQP(), gctx.settings_manager->Get("fixed_qp"));
 
     TickType_t prev_dump = xTaskGetTickCount();
     for (int i = 0;; ++i) {

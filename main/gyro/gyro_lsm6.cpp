@@ -89,7 +89,7 @@ static void IRAM_ATTR gyro_i2c_cb(void* arg) {
     static int16_t accel[3];
 
     static constexpr int64_t kGyroPrescale =
-        16777216 * (35e-3 * 3.141592 / 180.0) / (1.0 / 32.8 * 3.141592 / 180.0);
+        16777216 * (70e-3 * 3.141592 / 180.0) / (1.0 / 32.8 * 3.141592 / 180.0);
     static constexpr int64_t kAccelPrescale = 16777216 * 0.488e-3 / (16.0 / 32767);
 
     if (mini_i2c_read_reg_get_result(tmp_data, bytes_to_read) == ESP_OK) {
@@ -165,15 +165,15 @@ void gyro_lsm6_task(void* params) {
 
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL9_XL, (3 << REG_CTRL9_XL_BIT_I3C_DISABLE));
 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C,
-                            (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
+   
 
     // clang-format off
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL6_C, (3 << REG_CTRL6_C_BIT_FTYPE_0));
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G));
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (2 << REG_CTRL2_G_BIT_FS0_G)); // 9 is 3.33 khz
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 5 is 208 hz
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0));
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 208 hz / 16g
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (3 << REG_CTRL2_G_BIT_FS0_G)); // 3.33 k / 2000dps
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G)); 
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL6_C, (2 << REG_CTRL6_C_BIT_FTYPE_0)); // LPF1 cutoff 153hz
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0)); // 3.33 k BDR
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
     // clang-format on
 

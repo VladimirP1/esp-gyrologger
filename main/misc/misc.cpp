@@ -82,6 +82,8 @@ void button_task(void* params) {
         if (cur_state != prev_state && cur_state) {
             gctx.logger_control.active = !gctx.logger_control.active;
 
+            vTaskDelay(200 / portTICK_PERIOD_MS);
+            
             if (gctx.logger_control.active) {
                 wifi_stop();
             } else {

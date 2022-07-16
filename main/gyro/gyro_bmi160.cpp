@@ -143,7 +143,7 @@ bool probe_bmi160(uint8_t dev_adr) {
 
 void gyro_bmi160_task(void* params) {
     gctx.gyro_sr = 3300.0;
-    
+
     for (int i = 0; i < 10; ++i) {
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb6);  // reset
         vTaskDelay(100 / portTICK_PERIOD_MS);
@@ -163,8 +163,9 @@ void gyro_bmi160_task(void* params) {
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_RANGE, 0b1100);
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_CONF, 0b00101000);
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00101101);
-    // mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00001100); // 1.6k sample rate, 136hz LPF
+    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00001101);
+    // mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00001100); // 1.6k sample rate,
+    // 136hz LPF
 
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0, 0);
     mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);

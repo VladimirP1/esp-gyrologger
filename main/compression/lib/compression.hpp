@@ -290,6 +290,7 @@ class Coder {
     }
 
     void reset() {
+        qp.scale = 22;
         state.q = {};
         state.v = {};
     }

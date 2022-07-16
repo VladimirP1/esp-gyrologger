@@ -21,6 +21,7 @@ extern "C" {
 #include "global_context.hpp"
 
 #include "compression/lib/compression.hpp"
+#include "storage/settings.hpp"
 
 #include <string>
 
@@ -308,6 +309,83 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 static const httpd_uri_t root_get = {
     .uri = "/", .method = HTTP_GET, .handler = root_get_handler, .user_ctx = NULL};
 
+static esp_err_t settings_get_handler(httpd_req_t* req) {
+    std::string resp;
+    resp +=
+        R"--(<!doctype html><html lang=en><head><meta charset=utf-8><title>EspLog Setings</title></head><body>)--";
+    resp += "<h1>EspLog Settings (<a href=\"/\">go back</a>)</h1>";
+    resp += R"--(<table class="settings_table">)--";
+    for (auto& s : kSettingDescriptor) {
+        resp += R"--(<tr><td class="setting_name cell">)--";
+        resp += s.desc;
+        resp += "</td>\n<td class=\"cell\">";
+        resp += R"--(<input id=")--";
+        resp += s.name;
+        resp += R"--(" type="number" autocomplete="off" step="0.001" value=")--";
+        resp += std::to_string(gctx.settings_manager->Get(s.name));
+        resp += "\" min=\"";
+        resp += std::to_string(s.min_value);
+        resp += "\" max=\"";
+        resp += std::to_string(s.max_value);
+        resp += "\">";
+        resp += "</td>\n";
+        resp += R"--(<td class="apply_btn cell" id=")--";
+        resp += s.name;
+        resp += "__btn";
+        resp += R"--(" onclick=")--";
+        resp += "apply_setting('";
+        resp += s.name;
+        resp += "')";
+        resp += "\">Apply</td>\n";
+        resp += "</tr>";
+    }
+    resp += "</table>";
+    resp += html_update_uploader;
+    resp += "</body>";
+    resp += settings_style;
+    resp += js_settings;
+    resp += js_update_uploader;
+    resp += html_suffix;
+    HANDLE(httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
+
+    return ESP_OK;
+}
+
+static const httpd_uri_t settings_get = {
+    .uri = "/settings", .method = HTTP_GET, .handler = settings_get_handler, .user_ctx = NULL};
+
+static esp_err_t settings_post_handler(httpd_req_t* req) {
+    std::string buf;
+    buf.resize(300);
+    int received = httpd_req_recv(req, buf.data(), buf.size());
+    if (received <= 0) {
+        if (received == HTTPD_SOCK_ERR_TIMEOUT) {
+            httpd_resp_send_408(req);
+        }
+        return ESP_FAIL;
+    }
+
+    buf.resize(received);
+
+    auto pos = buf.find("=");
+    if (pos == std::string::npos) {
+        return ESP_FAIL;
+    }
+    auto name = buf.substr(0, pos);
+    auto value = stod(buf.substr(pos + 1));
+
+    ESP_LOGI(TAG, "%s=%f", name.c_str(), value);
+
+    HANDLE(gctx.settings_manager->Set(name.c_str(), value));
+
+    httpd_resp_set_status(req, "200 OK");
+    httpd_resp_sendstr(req, "OK\n");
+    return ESP_OK;
+}
+
+static const httpd_uri_t settings_post = {
+    .uri = "/settings", .method = HTTP_POST, .handler = settings_post_handler, .user_ctx = NULL};
+
 extern "C" {
 extern void spi_flash_disable_interrupts_caches_and_other_cpu(void);
 extern void spi_flash_enable_interrupts_caches_and_other_cpu(void);
@@ -478,6 +556,7 @@ static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
+    config.max_uri_handlers = 12;
 
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
@@ -489,6 +568,8 @@ static httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &status_get);
         httpd_register_uri_handler(server, &files_get);
         httpd_register_uri_handler(server, &root_post);
+        httpd_register_uri_handler(server, &settings_get);
+        httpd_register_uri_handler(server, &settings_post);
         return server;
     }
 

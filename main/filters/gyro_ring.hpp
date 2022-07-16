@@ -4,6 +4,7 @@
 #include "global_context.hpp"
 
 #include "dyn_notch.hpp"
+#include "storage/settings.hpp"
 
 extern "C" {
 #include <freertos/FreeRTOS.h>
@@ -143,7 +144,17 @@ class Calibrator {
 
 class GyroRing {
    public:
-    GyroRing() {}
+    GyroRing() {
+        gctx.filter_settings.disable_accel = gctx.settings_manager->Get("disable_accel");
+        gctx.filter_settings.pt_order = gctx.settings_manager->Get("pt_count");
+        gctx.filter_settings.pt_cutoff = gctx.settings_manager->Get("pt_cutoff");
+        gctx.filter_settings.dyn_count = gctx.settings_manager->Get("dyn_count");
+        gctx.filter_settings.dyn_freq_min = gctx.settings_manager->Get("dyn_freq_min");
+        gctx.filter_settings.dyn_freq_max = gctx.settings_manager->Get("dyn_freq_max");
+        gctx.filter_settings.dyn_q = gctx.settings_manager->Get("dyn_q");
+        gctx.filter_settings.dyn_lr = gctx.settings_manager->Get("dyn_lr");
+        gctx.filter_settings.dyn_lr_smooth = gctx.settings_manager->Get("dyn_lr_smooth");
+    }
 
     void Init(int capacity, int chunk_size, uint32_t desired_interval) {
         this->chunk_size_ = chunk_size;
@@ -170,11 +181,6 @@ class GyroRing {
         taskEXIT_CRITICAL_ISR(&ptr_mux_);
     }
 
-    static float pt1FilterGain(float f_cut, float dT) {
-        float RC = 1 / (2 * M_PI * f_cut);
-        return dT / (RC + dT);
-    }
-
     quat::quat *Work() {
         taskENTER_CRITICAL(&ptr_mux_);
         int cached_wptr = wptr_;
@@ -198,33 +204,50 @@ class GyroRing {
             auto gyro = quat::vec{quat::base_type{gscale * rs.gx}, quat::base_type{gscale * rs.gy},
                                   quat::base_type{gscale * rs.gz}};
 
-            static quat::base_type pt1gain{};
-            if (pt1gain == quat::base_type{}) {
-                pt1gain = quat::base_type{pt1FilterGain(150, 1. / gctx.gyro_sr)};
-            }
-            gyro.x = sx_ = sx_ + pt1gain * (gyro.x - sx_);
-            gyro.y = sy_ = sy_ + pt1gain * (gyro.y - sy_);
-            gyro.z = sz_ = sz_ + pt1gain * (gyro.z - sz_);
+            if (gctx.filter_settings.pt_order) {
+                if (!pts_[0]) {
+                    pts_[0] = new PtFilter(gctx.filter_settings.pt_order,
+                                           gctx.filter_settings.pt_cutoff, gctx.gyro_sr);
+                    pts_[1] = new PtFilter(gctx.filter_settings.pt_order,
+                                           gctx.filter_settings.pt_cutoff, gctx.gyro_sr);
+                    pts_[2] = new PtFilter(gctx.filter_settings.pt_order,
+                                           gctx.filter_settings.pt_cutoff, gctx.gyro_sr);
+                }
 
-            for (int i = 0; i < 6; ++i) {
+                gyro.x = pts_[0]->apply(gyro.x);
+                gyro.y = pts_[1]->apply(gyro.y);
+                gyro.z = pts_[2]->apply(gyro.z);
+            }
+
+            for (int i = 0; i < gctx.filter_settings.dyn_count; ++i) {
                 if (!notches_[i]) {
-                    notches_[i] = new DynamicNotch(gctx.gyro_sr);
-                    notches_[i + 12] = new DynamicNotch(gctx.gyro_sr);
-                    notches_[i + 24] = new DynamicNotch(gctx.gyro_sr);
+                    notches_[i] = new DynamicNotch(
+                        gctx.gyro_sr, gctx.filter_settings.dyn_freq_min,
+                        gctx.filter_settings.dyn_freq_max, gctx.filter_settings.dyn_q,
+                        gctx.filter_settings.dyn_lr, gctx.filter_settings.dyn_lr_smooth);
+                    notches_[i + 12] = new DynamicNotch(
+                        gctx.gyro_sr, gctx.filter_settings.dyn_freq_min,
+                        gctx.filter_settings.dyn_freq_max, gctx.filter_settings.dyn_q,
+                        gctx.filter_settings.dyn_lr, gctx.filter_settings.dyn_lr_smooth);
+                    notches_[i + 24] = new DynamicNotch(
+                        gctx.gyro_sr, gctx.filter_settings.dyn_freq_min,
+                        gctx.filter_settings.dyn_freq_max, gctx.filter_settings.dyn_q,
+                        gctx.filter_settings.dyn_lr, gctx.filter_settings.dyn_lr_smooth);
                 }
                 gyro.x = notches_[i]->apply(gyro.x);
                 gyro.y = notches_[i + 12]->apply(gyro.y);
                 gyro.z = notches_[i + 24]->apply(gyro.z);
             }
 
-            if (fpm::abs(gyro.x) > quat::base_type{2} || fpm::abs(gyro.y) > quat::base_type{2} || fpm::abs(gyro.z) > quat::base_type{2}) {
+            if (fpm::abs(gyro.x) > quat::base_type{2} || fpm::abs(gyro.y) > quat::base_type{2} ||
+                fpm::abs(gyro.z) > quat::base_type{2}) {
                 ESP_LOGW("ring", "Filter unstable?");
                 gyro = {};
             }
 
             quat_rptr_ = (accel_correction_ * quat_rptr_ * quat::quat{gyro});
 
-            if (rs.flags & kFlagHaveAccel) {
+            if (!gctx.filter_settings.disable_accel && rs.flags & kFlagHaveAccel) {
                 quat::base_type ascale{kAccelToG / 16.0};
                 quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
                 quat::quat corr;
@@ -336,7 +359,7 @@ class GyroRing {
 
     int chunk_size_;
     std::vector<sample> ring_;
-    DurationSmoother dur_smoother{1000};
+    DurationSmoother dur_smoother{8000};
     Calibrator calib_{};
 
     uint32_t desired_interval_;
@@ -351,7 +374,7 @@ class GyroRing {
     quat::quat accel_correction_{};
 
     DynamicNotch *notches_[36] = {};
-    quat::base_type sx_, sy_, sz_;
+    PtFilter *pts_[3] = {};
 
     std::vector<quat::quat> quats_chunk_;
 };

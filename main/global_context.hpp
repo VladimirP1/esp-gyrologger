@@ -12,11 +12,29 @@ extern "C" {
 #define kBlockSize 256
 
 class GyroRing;
+class SettingsManager;
+
+struct FilterSettings {
+    bool disable_accel{};
+    int pt_order{};
+    int pt_cutoff{};
+
+    int dyn_count{};
+    int dyn_freq_min{};
+    int dyn_freq_max{};
+    int dyn_q{};
+    int dyn_lr{};
+    double dyn_lr_smooth{}; 
+};
+
 typedef struct {
     GyroRing* gyro_ring;
+    SettingsManager* settings_manager;
 
     uint8_t gyro_i2c_adr;
     double gyro_sr;
+
+    FilterSettings filter_settings;
 
     volatile bool pause_polling;
     volatile bool continue_polling;
@@ -30,7 +48,7 @@ typedef struct {
         bool broken;
 
         bool calibration_pending;
-        
+
         // logger stats
         bool busy;
         int total_samples_written;
