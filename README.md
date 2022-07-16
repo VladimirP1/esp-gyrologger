@@ -1,9 +1,6 @@
 ### What is this?
 This is a GyroFlow-compatible data logger firmware for the esp32 and esp32-c3 microcontrollers (and probably others supported by esp-idf).
 
-### Warning
-This is in alpha-stage
-
 ### Supported IMUs
 The following IMUs can be used over the i2c bus:
 * BMI160
@@ -16,7 +13,7 @@ The following IMUs can be used over the i2c bus:
 
 <img src="img/screenshot_settings.png" width="540"></img>
 
-### How to build
+### How to build the logger
 #### Option 1 - from modules
 This is all you need (except wires), this should coust about $5:
 * [ESP32-C3-01M (4M)](https://aliexpress.ru/item/1005003092302540.html)
