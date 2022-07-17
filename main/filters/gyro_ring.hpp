@@ -26,8 +26,8 @@ static constexpr int loglevel = 0;
 static constexpr float kGyroToRads = 1.0 / 32.8 * 3.141592 / 180.0;
 static constexpr float kAccelToG = 16.0 / 32767;
 struct raw_sample {
-    int gx, gy, gz;
-    int ax, ay, az;
+    int16_t gx, gy, gz;
+    int16_t ax, ay, az;
     int flags;
 };
 
@@ -145,7 +145,7 @@ class Calibrator {
 class GyroRing {
    public:
     GyroRing() {
-        gctx.filter_settings.disable_accel = gctx.settings_manager->Get("disable_accel");
+        gctx.filter_settings.disable_accel = gctx.settings_manager->Get("disable_accel") > 0.5;
         gctx.filter_settings.pt_order = gctx.settings_manager->Get("pt_count");
         gctx.filter_settings.pt_cutoff = gctx.settings_manager->Get("pt_cutoff");
         gctx.filter_settings.dyn_count = gctx.settings_manager->Get("dyn_count");
@@ -165,7 +165,7 @@ class GyroRing {
         ESP_LOGI(kLogTag, "inv_interval %f", (double)inv_desired_interval_);
     }
 
-    void Push(uint32_t dur_ns, int gx, int gy, int gz, int ax, int ay, int az, int flags) {
+    void Push(uint32_t dur_ns, int16_t gx, int16_t gy, int16_t gz, int16_t ax, int16_t ay, int16_t az, int flags) {
         static int shadow_wptr{};
 
         auto &s = ring_[shadow_wptr];

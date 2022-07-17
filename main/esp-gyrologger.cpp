@@ -42,13 +42,15 @@ static void nvs_init() {
 void app_main_cpp(void) {
     nvs_init();
 
+    gctx.settings_manager = new SettingsManager();
+
     wifi_init();
 
     ESP_ERROR_CHECK(storage_fat_init());
 
-    ESP_ERROR_CHECK(mini_i2c_init(6, 7, 400000));
+    ESP_ERROR_CHECK(mini_i2c_init(gctx.settings_manager->Get("sda_pin"),
+                                  gctx.settings_manager->Get("scl_pin"), 400000));
 
-    gctx.settings_manager = new SettingsManager();
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
     gctx.gyro_ring = new GyroRing();
     gctx.gyro_ring->Init(3072, kBlockSize, 1800);

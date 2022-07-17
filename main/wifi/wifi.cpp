@@ -1,6 +1,8 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
 #include "wifi.hpp"
+#include "global_context.hpp"
+#include "storage/settings.hpp"
 
 extern "C" {
 #include "esp_mac.h"
@@ -97,9 +99,12 @@ static void wifi_init_softap() {
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));
+
     ESP_ERROR_CHECK(esp_wifi_start());
-    ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(8));
-    // ESP_ERROR_CHECK(esp_wifi_set_protocol(WIFI_IF_AP, WIFI_PROTOCOL_11B));
+
+    if (gctx.settings_manager->Get("wifi_2dbm") > 0.5) {
+        ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(8));
+    }
 }
 
 static std::string wifi_scan(void) {

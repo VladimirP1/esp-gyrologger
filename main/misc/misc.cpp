@@ -1,6 +1,7 @@
 #include "misc.hpp"
 
 #include "global_context.hpp"
+#include "storage/settings.hpp"
 #include "wifi/wifi.hpp"
 
 extern "C" {
@@ -11,18 +12,21 @@ extern "C" {
 #include <freertos/task.h>
 }
 
-#define LED_GPIO GPIO_NUM_5
-#define BUTTON_GPIO GPIO_NUM_19
+static gpio_num_t led_gpio{};
+static gpio_num_t btn_gpio{};
 
 void led_task(void* params) {
+    led_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("led_pin"));
+    btn_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("btn_pin"));
+
     sigmadelta_config_t sigmadelta_cfg = {
         .channel = SIGMADELTA_CHANNEL_0,
-        .sigmadelta_duty = 0,
+        .sigmadelta_duty = -128,
         .sigmadelta_prescale = 80,
-        .sigmadelta_gpio = LED_GPIO,
+        .sigmadelta_gpio = static_cast<uint8_t>(led_gpio),
     };
     sigmadelta_config(&sigmadelta_cfg);
-    gpio_set_drive_capability(LED_GPIO, GPIO_DRIVE_CAP_0);
+    gpio_set_drive_capability(led_gpio, GPIO_DRIVE_CAP_0);
 
     int duty = 0;
     bool dir = false;
@@ -56,7 +60,7 @@ void led_task(void* params) {
 }
 
 void button_task(void* params) {
-    gpio_set_direction(BUTTON_GPIO, GPIO_MODE_INPUT);
+    gpio_set_direction(btn_gpio, GPIO_MODE_INPUT);
 
     static constexpr int kDebounceThreshold = 6;
     int debounce_counter = 0;
@@ -65,7 +69,7 @@ void button_task(void* params) {
     bool prev_state = false;
 
     while (true) {
-        if (!gpio_get_level(BUTTON_GPIO)) {
+        if (!gpio_get_level(btn_gpio)) {
             if (debounce_counter == 1) {
                 cur_state = true;
                 debounce_counter = 0;
