@@ -48,16 +48,21 @@ void app_main_cpp(void) {
 
     ESP_ERROR_CHECK(storage_fat_init());
 
-    ESP_ERROR_CHECK(mini_i2c_init(gctx.settings_manager->Get("sda_pin"),
-                                  gctx.settings_manager->Get("scl_pin"), 400000));
-
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
     gctx.gyro_ring = new GyroRing();
     gctx.gyro_ring->Init(3072, kBlockSize, 1800);
 
     xTaskCreate(logger_task, "logger", 3084, NULL, configMAX_PRIORITIES - 3, NULL);
 
-    gyro_probe_and_start_task();
+    int sda_pin = gctx.settings_manager->Get("sda_pin");
+    int scl_pin = gctx.settings_manager->Get("scl_pin");
+    if (sda_pin >= 0 && scl_pin >= 0) {
+        ESP_ERROR_CHECK(mini_i2c_init(gctx.settings_manager->Get("sda_pin"),
+                                      gctx.settings_manager->Get("scl_pin"), 400000));
+        gyro_probe_and_start_task();
+    } else {
+        ESP_LOGW(TAG, "Please assign i2c gpio pins!");
+    }
 
     xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
     xTaskCreate(button_task, "button-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);

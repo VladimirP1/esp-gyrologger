@@ -17,7 +17,11 @@ static gpio_num_t btn_gpio{};
 
 void led_task(void* params) {
     led_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("led_pin"));
-    btn_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("btn_pin"));
+
+    if (led_gpio < 0) {
+        vTaskDelete(nullptr);
+        return;
+    }
 
     sigmadelta_config_t sigmadelta_cfg = {
         .channel = SIGMADELTA_CHANNEL_0,
@@ -60,6 +64,13 @@ void led_task(void* params) {
 }
 
 void button_task(void* params) {
+    btn_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("btn_pin"));
+
+    if (btn_gpio < 0) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
     gpio_set_direction(btn_gpio, GPIO_MODE_INPUT);
 
     static constexpr int kDebounceThreshold = 6;
@@ -87,7 +98,7 @@ void button_task(void* params) {
             gctx.logger_control.active = !gctx.logger_control.active;
 
             vTaskDelay(200 / portTICK_PERIOD_MS);
-            
+
             if (gctx.logger_control.active) {
                 wifi_stop();
             } else {

@@ -13,8 +13,6 @@ extern "C" {
 
 #include <nvs_handle.hpp>
 
-#include "target.h"
-
 struct Setting {
     const char* name;
     const char* desc;
@@ -24,10 +22,10 @@ struct Setting {
 };
 
 static const std::initializer_list<Setting> kSettingDescriptor = {
-    {"sda_pin", "SDA pin", 0.0, 64.0, DEFAULT_SDA_PIN},
-    {"scl_pin", "SCL pin", 0.0, 64.0, DEFAULT_SCL_PIN},
-    {"led_pin", "Led pin", 0.0, 64.0, DEFAULT_LED_PIN},
-    {"btn_pin", "Button pin", 0.0, 64.0, DEFAULT_BTN_PIN},
+    {"sda_pin", "SDA pin", -1.0, 64.0, -1},
+    {"scl_pin", "SCL pin", -1.0, 64.0, -1},
+    {"led_pin", "Led pin", -1.0, 64.0, -1},
+    {"btn_pin", "Button pin", -1.0, 64.0, -1},
     {"wifi_2dbm", "Set TX power to 2dbm", 0.0, 1.0, 1.0},
     {"disable_accel", "Disable accelerometer", 0.0, 1.0, 0.0},
     {"fixed_qp", "Quantization parameter", 8.0, 20.0, 14.0},

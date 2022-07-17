@@ -181,9 +181,16 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_sync(uint8_t dev_adr, uint8_t reg_adr, uin
     i2c_hal_enable_master_tx_it(&i2c_ctx.hal);
     i2c_hal_trans_start(&i2c_ctx.hal);
 
-    while (i2c_ctx.status == I2C_STATUS_ACTIVE) {
+    uint8_t cnt = 1000;
+    while (cnt && i2c_ctx.status == I2C_STATUS_ACTIVE) {
         esp_rom_delay_us(10);
         i2c_isr_handler(NULL);
+        --cnt;
+    }
+
+    if (!cnt) {
+        xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
+        return ESP_FAIL;
     }
 
     i2c_hal_read_rxfifo(&i2c_ctx.hal, bytes, n_bytes);
