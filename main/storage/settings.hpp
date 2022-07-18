@@ -29,14 +29,14 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"wifi_2dbm", "Set TX power to 2dbm", 0.0, 1.0, 1.0},
     {"disable_accel", "Disable accelerometer", 0.0, 1.0, 0.0},
     {"fixed_qp", "Quantization parameter", 8.0, 20.0, 14.0},
-    {"pt_count", "PT?", 0.0, 3.0, 3.0},
+    {"pt_count", "PT?", 0.0, 3.0, 2.0},
     {"pt_cutoff", "PT? cutoff", 25.0, 500.0, 150.0},
-    {"dyn_count", "Dyn filter count", 0.0, 8.0, 0.0},
-    {"dyn_freq_min", "Dyn filter min freq", 100.0, 1000.0, 150.0},
+    {"dyn_count", "Dyn filter count", 0.0, 8.0, 4.0},
+    {"dyn_freq_min", "Dyn filter min freq", 100.0, 1000.0, 200.0},
     {"dyn_freq_max", "Dyn filter max freq", 100.0, 1000.0, 600.0},
-    {"dyn_q", "Dyn filter Q", 1.0, 1000.0, 10.0},
+    {"dyn_q", "Dyn filter Q", 1.0, 1000.0, 20.0},
     {"dyn_lr", "Dyn filter learning rate", 0.5, 10000.0, 300.0},
-    {"dyn_lr_smooth", "Dyn filter tracking smoothing", 0.0001, 1.0, 0.01}};
+    {"dyn_lr_smooth", "Dyn filter tracking smoothing", 0.0001, 1.0, 0.005}};
 
 class SettingsManager {
    public:
