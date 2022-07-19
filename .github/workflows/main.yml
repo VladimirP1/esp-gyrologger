@@ -8,21 +8,41 @@ on:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
-    container:
-      image: espressif/idf:v4.4.1
-    steps:
-      - uses: actions/checkout@v3
-      - name: Run a multi-line script
-        run: |
-          /opt/esp/entrypoint.sh idf.py set-target esp32c3
-          /opt/esp/entrypoint.sh idf.py build
+    - name: Build for esp32-c3
+      runs-on: ubuntu-latest
+      container:
+        image: espressif/idf:v4.4.1
+      steps:
+        - uses: actions/checkout@v3
+        - name: Build
+          run: |
+            /opt/esp/entrypoint.sh idf.py set-target esp32c3
+            /opt/esp/entrypoint.sh idf.py build
 
-      - name: Upload a Build Artifact
-        uses: actions/upload-artifact@v3.1.0
-        with:
-          name: firmware.bin
-          # A file, directory or wildcard pattern that describes what to upload
-          path: build/esp-gyrologger.bin
-          if-no-files-found: error
-          retention-days: 90
+        - name: Publish artifact
+          uses: actions/upload-artifact@v3.1.0
+          with:
+            name: firmware.bin
+            path: build/esp-gyrologger.bin
+            if-no-files-found: error
+            retention-days: 90
+          
+    - name: Build for esp32
+      runs-on: ubuntu-latest
+      container:
+        image: espressif/idf:v4.4.1
+      steps:
+        - uses: actions/checkout@v3
+        - name: Build
+          run: |
+            /opt/esp/entrypoint.sh idf.py set-target esp32c3
+            /usr/bin/mv sdkconfig.esp32 sdkconfig
+            /opt/esp/entrypoint.sh idf.py build
+
+        - name: Publish artifact
+          uses: actions/upload-artifact@v3.1.0
+          with:
+            name: firmware.bin
+            path: build/esp-gyrologger.bin
+            if-no-files-found: error
+            retention-days: 90
