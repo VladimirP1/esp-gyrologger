@@ -16,8 +16,6 @@ jobs:
         - uses: actions/checkout@v3
         - name: Build
           run: |
-            /opt/esp/entrypoint.sh idf.py set-target esp32c3
-            /usr/bin/mv sdkconfig.old sdkconfig
             /opt/esp/entrypoint.sh idf.py build
 
         - name: Publish artifact
