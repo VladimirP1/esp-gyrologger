@@ -41,6 +41,7 @@ jobs:
             /opt/esp/entrypoint.sh idf.py set-target esp32
             /usr/bin/cp sdkconfig.esp32 sdkconfig
             /opt/esp/entrypoint.sh idf.py build
+            /usr/bin/echo 'esputil -p COMx flash 0x1000 bootloader.bin  0x8000 partition-table.bin 0x10000 esp-gyrologger.bin' > readme.txt
             /usr/bin/mkdir esplog
             /usr/bin/cp readme.txt build/esp-gyrologger.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin esplog
 
