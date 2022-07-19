@@ -7,8 +7,8 @@ on:
   workflow_dispatch:
 
 jobs:
-  build:
-    - name: Build for esp32-c3
+    build1:
+      name: Build for esp32-c3
       runs-on: ubuntu-latest
       container:
         image: espressif/idf:v4.4.1
@@ -26,8 +26,8 @@ jobs:
             path: build/esp-gyrologger.bin
             if-no-files-found: error
             retention-days: 90
-          
-    - name: Build for esp32
+    build2:
+      name: Build for esp32
       runs-on: ubuntu-latest
       container:
         image: espressif/idf:v4.4.1
