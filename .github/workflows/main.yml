@@ -17,12 +17,14 @@ jobs:
         - name: Build
           run: |
             /opt/esp/entrypoint.sh idf.py build
+            /usr/bin/echo 'esputil -p COMx flash 0x1000 bootloader.bin  0x8000 partition-table.bin 0x10000 esp-gyrologger.bin' > readme.txt
+            /usr/bin/zip -j esplog.zip readme.txt build/esp-gyrologger.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin
 
         - name: Publish artifact
           uses: actions/upload-artifact@v3.1.0
           with:
-            name: firmware_esp32c3.bin
-            path: build/esp-gyrologger.bin
+            name: esplog_esp32c3.zip
+            path: esplog.zip
             if-no-files-found: error
             retention-days: 90
     build2:
@@ -38,11 +40,13 @@ jobs:
             /opt/esp/entrypoint.sh idf.py set-target esp32
             /usr/bin/cp sdkconfig.esp32 sdkconfig
             /opt/esp/entrypoint.sh idf.py build
+            /usr/bin/echo 'esputil -p COMx flash 0x1000 bootloader.bin  0x8000 partition-table.bin 0x10000 esp-gyrologger.bin' > readme.txt
+            /usr/bin/zip -j esplog.zip readme.txt build/esp-gyrologger.bin build/bootloader/bootloader.bin build/partition_table/partition-table.bin
 
         - name: Publish artifact
           uses: actions/upload-artifact@v3.1.0
           with:
-            name: firmware_esp32.bin
-            path: build/esp-gyrologger.bin
+            name: esplog_esp32.zip
+            path: esplog.zip
             if-no-files-found: error
             retention-days: 90
