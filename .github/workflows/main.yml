@@ -22,8 +22,8 @@ jobs:
         - name: Publish artifact
           uses: actions/upload-artifact@v3.1.0
           with:
-            name: firmware.bin
-            path: build/esp-gyrologger-esp32c3.bin
+            name: firmware_esp32c3.bin
+            path: build/esp-gyrologger.bin
             if-no-files-found: error
             retention-days: 90
     build2:
@@ -42,7 +42,7 @@ jobs:
         - name: Publish artifact
           uses: actions/upload-artifact@v3.1.0
           with:
-            name: firmware.bin
-            path: build/esp-gyrologger-esp32.bin
+            name: firmware_esp32.bin
+            path: build/esp-gyrologger.bin
             if-no-files-found: error
             retention-days: 90
