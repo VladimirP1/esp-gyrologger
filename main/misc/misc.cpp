@@ -99,10 +99,12 @@ void button_task(void* params) {
 
             vTaskDelay(200 / portTICK_PERIOD_MS);
 
-            if (gctx.logger_control.active) {
-                wifi_stop();
-            } else {
-                wifi_start();
+            if (gctx.settings_manager->Get("wifi_stop_act") > 0.5) {
+                if (gctx.logger_control.active) {
+                    wifi_stop();
+                } else {
+                    wifi_start();
+                }
             }
         }
 

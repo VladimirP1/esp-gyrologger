@@ -27,6 +27,7 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"led_pin", "Led pin", -1.0, 64.0, -1},
     {"btn_pin", "Button pin", -1.0, 64.0, -1},
     {"wifi_2dbm", "Set TX power to 2dbm", 0.0, 1.0, 1.0},
+    {"wifi_stop_act", "Disable wifi when started with button", 0.0, 1.0, 1.0},
     {"disable_accel", "Disable accelerometer", 0.0, 1.0, 0.0},
     {"fixed_qp", "Quantization parameter", 8.0, 20.0, 14.0},
     {"pt_count", "PT?", 0.0, 3.0, 2.0},
