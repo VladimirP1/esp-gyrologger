@@ -1,11 +1,21 @@
 ### What is this?
-This is a GyroFlow-compatible data logger firmware for the esp32 and esp32-c3 microcontrollers (and probably others supported by esp-idf).
+This is a GyroFlow-compatible data logger firmware for the esp32 and esp32-c3 microcontrollers (and probably others supported by esp-idf)
 
-### Supported IMUs
-The following IMUs can be used over the i2c bus:
-* BMI160
-* MPU-6050 / MPU-6000
-* LSM6DSR (not recommended)
+### Required hardware
+* An esp32 or esp32-c3 with 4MB flash
+* A BMI160 or MPU6050 IMU
+* 4 wires
+
+You can get these as separate modules or on a single board (EspLog)
+
+### How to flash and get started?
+1. Connect your IMU board to the ESP board. For esp32 it is recommended to connect SDA and SCL to pins 16 and 17 accordingly. For esp32-c3 - to pins 6 and 7.
+1. Download the firmware from github. You can find the latest build in "Artifacts" of the latest build from the "Actions" tab.
+The zip file will contain a readme file with a command line for flashing using [esputil](https://github.com/cpq/esputil).
+2. After flashing the firmware you should see a wifi network with SSID starting with "esplog_". Connect to that network with "12345678" password.
+3. Go to [http://192.168.4.1/settings](http://192.168.4.1/settings), enter the SDA and SCL pin numbers you have connected the IMU to, click "Apply".
+4. Reboot the board and go to [http://192.168.4.1](http://192.168.4.1). If the IMU is OK, "Avg gyro sample int. (ns)" should be non-zero.
+5. Now you can connect a button and a led to any free pins and assign the pin numbers in settings. NOTE: when recording is started using the button, wifi is disabled until you stop the recording using the button. This is done intentionally.
 
 ### Screenshots
 
@@ -13,15 +23,7 @@ The following IMUs can be used over the i2c bus:
 
 <img src="img/screenshot_settings.png" width="540"></img>
 
-### How to build the logger
-#### Option 1 - from modules
-This is all you need (except wires), this should coust about $5:
-* [ESP32-C3-01M (4M)](https://aliexpress.ru/item/1005003092302540.html)
-* [BMI160](https://aliexpress.ru/item/4000052683444.html)
-* [AMS1117 3.3v LDO](https://aliexpress.ru/item/32659371619.html)
-* [USB-C breakout board](https://aliexpress.ru/item/1005002795893679.html)
-
-#### Option 2 - Custom PCB
+#### EspLog PCB
 
 Four-layer 11 x 14 mm PCB with esp32-c3, 3.3v ldo and either bmi160 or lsm6dsr gyro.
 The side with the components can be submerged in epoxy, making the logger almost a perfect 11x14x2.5mm cube, so it is easier to glue to a camera.
@@ -31,16 +33,7 @@ The side with the components can be submerged in epoxy, making the logger almost
 <img src="img/esplog_02_bot.svg" width="320"></img>
 <img src="img/esplog_02_top.svg" width="320"></img>
 
-Although the previous version of this PCB has been manufacted and assembled by hand, found bugs were fixed in this version, no guarantees that this version is bug-free.
+Photos of the previous version of this board, assembled:
 
 <img src="img/esplog_front.jpg" width="320"></img>
 <img src="img/esplog_back.jpg" width="320"></img>
-### Hardware prototypes
-#### EspLog
-![esplog logger](img/small_logger_esplog_bmi160.jpg)
-
-#### Simple esp32c3 logger
-![esp32c3 + mpu6050 logger](img/small_logger_esp32c3_mpu6050.jpg)
-
-#### Esp32 logger
-![esp32 + mpu6050 logger](img/small_logger_esp32_mpu6050.jpg)
