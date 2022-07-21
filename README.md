@@ -11,7 +11,7 @@ You can get these as separate modules or on a single board (EspLog)
 ### How to flash and get started?
 1. Connect your IMU board to the ESP board. For esp32 it is recommended to connect SDA and SCL to pins 16 and 17 accordingly. For esp32-c3 - to pins 6 and 7.
 1. Download the firmware from github. You can find the latest build in "Artifacts" of the latest build from the "Actions" tab.
-The zip file will contain a readme file with a command line for flashing using [esputil](https://github.com/cpq/esputil).
+The zip file will contain a readme file with a command line for flashing using [esptool](https://github.com/espressif/esptool/releases/tag/v4.1).
 2. After flashing the firmware you should see a wifi network with SSID starting with "esplog_". Connect to that network with "12345678" password.
 3. Go to [http://192.168.4.1/settings](http://192.168.4.1/settings), enter the SDA and SCL pin numbers you have connected the IMU to, click "Apply".
 4. Reboot the board and go to [http://192.168.4.1](http://192.168.4.1). If the IMU is OK, "Avg gyro sample int. (ns)" should be non-zero.
