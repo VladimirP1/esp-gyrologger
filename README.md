@@ -33,7 +33,7 @@ The side with the components can be submerged in epoxy, making the logger almost
 <img src="img/esplog_02_bot.svg" width="320"></img>
 <img src="img/esplog_02_top.svg" width="320"></img>
 
-Photos of the previous version of this board, assembled:
+Assembled:
 
-<img src="img/esplog_front.jpg" width="320"></img>
-<img src="img/esplog_back.jpg" width="320"></img>
+<img src="img/esplog_02_front.jpg" width="320"></img>
+<img src="img/esplog_02_back.jpg" width="320"></img>
