@@ -95,7 +95,7 @@ static void wifi_init_softap() {
                                         .authmode = WIFI_AUTH_WPA_WPA2_PSK,
                                         .max_connection = EXAMPLE_MAX_STA_CONN}};
     strcpy((char *)wifi_config.ap.ssid, ssid.c_str());
-    strcpy((char *)wifi_config.ap.password, "12345678");
+    strcpy((char *)wifi_config.ap.password, gctx.settings_manager->GetString("wifi_password").c_str());
 
     ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config));

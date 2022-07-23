@@ -43,10 +43,12 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"dyn_freq_max", "Dyn filter max freq", 100.0, 1000.0, 600.0},
     {"dyn_q", "Dyn filter Q", 1.0, 1000.0, 20.0},
     {"dyn_lr", "Dyn filter learning rate", 0.5, 10000.0, 300.0},
-    {"dyn_lr_smooth", "Dyn filter tracking smoothing", 0.0001, 1.0, 0.005}};
+    {"dyn_lr_smooth", "Dyn filter tracking smoothing", 0.0001, 1.0, 0.005},
+};
 
 static const std::initializer_list<StringSetting> kStringSettingDescriptor = {
     {"imu_orientation", "IMU Orientation", "xyz"},
+    {"wifi_password", "WiFi password", "12345678"},
 };
 
 class SettingsManager {
