@@ -21,6 +21,12 @@ struct Setting {
     double default_value;
 };
 
+struct StringSetting {
+    const char* name;
+    const char* desc;
+    const char* default_value;
+};
+
 static const std::initializer_list<Setting> kSettingDescriptor = {
     {"sda_pin", "SDA pin", -1.0, 64.0, -1},
     {"scl_pin", "SCL pin", -1.0, 64.0, -1},
@@ -39,6 +45,10 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"dyn_lr", "Dyn filter learning rate", 0.5, 10000.0, 300.0},
     {"dyn_lr_smooth", "Dyn filter tracking smoothing", 0.0001, 1.0, 0.005}};
 
+static const std::initializer_list<StringSetting> kStringSettingDescriptor = {
+    {"imu_orientation", "IMU Orientation", "xyz"},
+};
+
 class SettingsManager {
    public:
     SettingsManager() {
@@ -52,24 +62,64 @@ class SettingsManager {
                 break;
             }
         }
+        for (auto& s : kStringSettingDescriptor) {
+            char tmp[128];
+            if (nvs_handle->get_string(s.name, tmp, 128) != ESP_OK) {
+                Reset();
+                break;
+            }
+        }
+    }
+
+    bool IsStringValue(const char* name) {
+        for (auto& s : kStringSettingDescriptor) {
+            if (strcmp(s.name, name) == 0) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    bool IsDoubleValue(const char* name) {
+        for (auto& s : kSettingDescriptor) {
+            if (strcmp(s.name, name) == 0) {
+                return true;
+            }
+        }
+        return false;
     }
 
     double Get(const char* name) {
-        for (auto& s : kSettingDescriptor) {
-            if (strcmp(s.name, name) == 0) {
-                double value{};
-                ESP_ERROR_CHECK(nvs_handle->get_blob(name, &value, 8));
-                return value;
-            }
+        if (IsDoubleValue(name)) {
+            double value{};
+            ESP_ERROR_CHECK(nvs_handle->get_blob(name, &value, 8));
+            return value;
         }
         return 0.0;
     }
 
+    std::string GetString(const char* name) {
+        if (IsStringValue(name)) {
+            std::string s;
+            s.resize(128);
+            ESP_ERROR_CHECK(nvs_handle->get_string(name, s.data(), s.size()));
+            s.resize(strlen(s.data()));
+            return s;
+        }
+
+        return {};
+    }
+
     esp_err_t Set(const char* name, double value) {
-        for (auto& s : kSettingDescriptor) {
-            if (strcmp(s.name, name) == 0) {
-                return nvs_handle->set_blob(name, &value, 8);
-            }
+        if (IsDoubleValue(name)) {
+            return nvs_handle->set_blob(name, &value, 8);
+        }
+        return ESP_FAIL;
+    }
+
+    esp_err_t SetString(const char* name, const char* value) {
+        if (IsStringValue(name)) {
+            return nvs_handle->set_string(name, value);
         }
         return ESP_FAIL;
     }
@@ -78,6 +128,9 @@ class SettingsManager {
         ESP_ERROR_CHECK(nvs_handle->erase_all());
         for (auto& s : kSettingDescriptor) {
             ESP_ERROR_CHECK(Set(s.name, s.default_value));
+        }
+        for (auto& s : kStringSettingDescriptor) {
+            ESP_ERROR_CHECK(SetString(s.name, s.default_value));
         }
     }
 

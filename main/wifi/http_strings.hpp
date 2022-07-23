@@ -320,7 +320,7 @@ const char js_update_uploader[] = R"--(
 </script>
 )--";
 
-const char js_wasm_decoder[] = R"--(<script type="text/javascript">
+const char js_wasm_decoder_0[] = R"--(<script type="text/javascript">
 var wasm = [
    "AGFzbQEAAAABehNgAX8Bf2ACf38Bf2ABfwBgAn9/AGAAAX9gA39/fwF/YAN/f38AYAR/f39/AGAA",
 "AGAFf39/f38AYAZ/f39/f38AYAR/f39/AX9gBn98f39/fwF/YAV/f39/fwF/YAJ/fAF/YAF/AXxg",
@@ -981,7 +981,9 @@ var wasm = [
                 "GYROFLOW IMU LOG",
                 "version,1.1",
                 "id,esplog",
-                "orientation,YxZ",
+                "orientation,)--";
+
+const char js_wasm_decoder_1[] = R"--(",
                 "tscale,0.00180",
                 "gscale,0.00053263221",
                 "ascale,0.0001",

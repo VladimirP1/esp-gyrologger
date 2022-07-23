@@ -300,7 +300,9 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, html_body, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_xhr_status_updater, HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder, HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_0, HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, gctx.settings_manager->GetString("imu_orientation").c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_1, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
@@ -327,6 +329,26 @@ static esp_err_t settings_get_handler(httpd_req_t* req) {
         resp += std::to_string(s.min_value);
         resp += "\" max=\"";
         resp += std::to_string(s.max_value);
+        resp += "\">";
+        resp += "</td>\n";
+        resp += R"--(<td class="apply_btn cell" id=")--";
+        resp += s.name;
+        resp += "__btn";
+        resp += R"--(" onclick=")--";
+        resp += "apply_setting('";
+        resp += s.name;
+        resp += "')";
+        resp += "\">Apply</td>\n";
+        resp += "</tr>";
+    }
+    for (auto& s : kStringSettingDescriptor) {
+        resp += R"--(<tr><td class="setting_name cell">)--";
+        resp += s.desc;
+        resp += "</td>\n<td class=\"cell\">";
+        resp += R"--(<input id=")--";
+        resp += s.name;
+        resp += R"--(" type="text" autocomplete="off" value=")--";
+        resp += gctx.settings_manager->GetString(s.name);
         resp += "\">";
         resp += "</td>\n";
         resp += R"--(<td class="apply_btn cell" id=")--";
@@ -372,11 +394,15 @@ static esp_err_t settings_post_handler(httpd_req_t* req) {
         return ESP_FAIL;
     }
     auto name = buf.substr(0, pos);
-    auto value = stod(buf.substr(pos + 1));
-
-    ESP_LOGI(TAG, "%s=%f", name.c_str(), value);
-
-    HANDLE(gctx.settings_manager->Set(name.c_str(), value));
+    if (gctx.settings_manager->IsDoubleValue(name.c_str())) {
+        auto value = stod(buf.substr(pos + 1));
+        ESP_LOGI(TAG, "%s=%f", name.c_str(), value);
+        HANDLE(gctx.settings_manager->Set(name.c_str(), value));
+    } else if (gctx.settings_manager->IsStringValue(name.c_str())) {
+        auto value = buf.substr(pos + 1);
+        ESP_LOGI(TAG, "%s=%s", name.c_str(), value.c_str());
+        HANDLE(gctx.settings_manager->SetString(name.c_str(), value.c_str()));
+    }
 
     httpd_resp_set_status(req, "200 OK");
     httpd_resp_sendstr(req, "OK\n");
