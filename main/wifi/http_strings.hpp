@@ -1035,7 +1035,7 @@ const char html_calibration[] = R"--(
 <html lang=en>
 <head>
     <meta charset=utf-8>
-    <title>EspLog</title>
+    <title>EspLog Calibration</title>
 </head>
 <body>
     <h1>Accelerometer calibration</h1>
