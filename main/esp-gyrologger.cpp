@@ -49,6 +49,7 @@ void app_main_cpp(void) {
     ESP_ERROR_CHECK(storage_fat_init());
 
     gctx.logger_control.mutex = xSemaphoreCreateMutex();
+    gctx.logger_control.accel_raw_mtx = xSemaphoreCreateMutex();
     gctx.gyro_ring = new GyroRing();
     gctx.gyro_ring->Init(3072, kBlockSize, 1800);
 

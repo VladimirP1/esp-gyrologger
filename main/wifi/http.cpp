@@ -44,8 +44,6 @@ static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
     char buf2[256];
     int bytes_total = 0;
 
-    gctx.pause_polling = true;
-
     ESP_LOGI(TAG, "Reading file");
     FILE* f = fopen(filename, "rb");
     if (f == NULL) {
@@ -66,15 +64,12 @@ static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
             break;
         }
 
-        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, read_bytes), fclose(f);
-                       gctx.continue_polling = true);
+        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, read_bytes), fclose(f));
     }
 
     fclose(f);
 
-    HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), gctx.continue_polling = true);
-
-    gctx.continue_polling = true;
+    HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), ;);
 
     return ESP_OK;
 }
@@ -82,8 +77,6 @@ static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
 static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
     static uint8_t buf2[2000];
     static char buf_text[4096];
-
-    gctx.pause_polling = true;
 
     const double sample_rate = 1.0 / 0.00180;
     const double gscale = 1 / 0.00053263221;
@@ -143,8 +136,7 @@ t,gx,gy,gz,ax,ay,ax
 
             if (wptr - buf_text > 3200) {
                 HANDLE_FINALLY(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN),
-                               fclose(f);
-                               gctx.continue_polling = true);
+                               fclose(f));
                 wptr = buf_text;
             }
         }
@@ -158,13 +150,10 @@ t,gx,gy,gz,ax,ay,ax
     fclose(f);
 
     if (wptr != buf_text) {
-        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN),
-                       gctx.continue_polling = true);
+        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN), ;);
     }
 
-    HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), gctx.continue_polling = true);
-
-    gctx.continue_polling = true;
+    HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), ;);
 
     return ESP_OK;
 }
@@ -301,7 +290,8 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_xhr_status_updater, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_0, HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, gctx.settings_manager->GetString("imu_orientation").c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, gctx.settings_manager->GetString("imu_orientation").c_str(),
+                                 HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_1, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
@@ -578,6 +568,73 @@ static esp_err_t root_post_handler(httpd_req_t* req) {
 static const httpd_uri_t root_post = {
     .uri = "/", .method = HTTP_POST, .handler = root_post_handler, .user_ctx = NULL};
 
+static esp_err_t calibration_get_handler(httpd_req_t* req) {
+    HANDLE(httpd_resp_send(req, html_calibration, HTTPD_RESP_USE_STRLEN));
+    return ESP_OK;
+}
+
+static const httpd_uri_t calibration_get = {.uri = "/calibration",
+                                            .method = HTTP_GET,
+                                            .handler = calibration_get_handler,
+                                            .user_ctx = NULL};
+
+static esp_err_t calibration_post_handler(httpd_req_t* req) {
+    std::string content;
+    content.resize(req->content_len);
+    int ret = httpd_req_recv(req, content.data(), req->content_len);
+    if (ret <= 0) {
+        if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+            httpd_resp_send_408(req);
+        }
+        return ESP_FAIL;
+    }
+
+    if (content == "get_acceleration") {
+        httpd_resp_set_status(req, "200 OK");
+        httpd_resp_set_type(req, "application/json");
+
+        double accel[3] = {};
+        if (xSemaphoreTake(gctx.logger_control.accel_raw_mtx, portMAX_DELAY)) {
+            accel[0] = gctx.logger_control.accel_raw[0];
+            accel[1] = gctx.logger_control.accel_raw[1];
+            accel[2] = gctx.logger_control.accel_raw[2];
+            xSemaphoreGive(gctx.logger_control.accel_raw_mtx);
+        }
+        std::string json_str = "{\"acceleration\" : [" + std::to_string(accel[0]) + "," +
+                               std::to_string(accel[1]) + "," + std::to_string(accel[2]) + "]}";
+        HANDLE(httpd_resp_sendstr(req, json_str.c_str()));
+        return ESP_OK;
+    } else if (strncmp(content.c_str(), "set_offsets_ug", 14) == 0) {
+        int pos;
+        long long xyz[3];
+
+        pos = content.find("/");
+        for (int i = 0; i < 3; ++i) {
+            content = content.substr(pos + 1);
+            pos = content.find("/");
+            ESP_LOGI(TAG, "%s", content.substr(0, pos - 1).c_str());
+            xyz[i] = std::stoll(content.substr(0, pos));
+        }
+
+        ESP_LOGI(TAG, "%lld %lld %lld", xyz[0], xyz[1], xyz[2]);
+
+        HANDLE(gctx.settings_manager->Set("accel_ofs_x", xyz[0] / 1e6));
+        HANDLE(gctx.settings_manager->Set("accel_ofs_y", xyz[1] / 1e6));
+        HANDLE(gctx.settings_manager->Set("accel_ofs_z", xyz[2] / 1e6));
+
+        HANDLE(httpd_resp_sendstr(req, "OK\n"));
+        return ESP_OK;
+    }
+
+    httpd_resp_send_500(req);
+    return ESP_OK;
+}
+
+static const httpd_uri_t calibration_post = {.uri = "/calibration",
+                                             .method = HTTP_POST,
+                                             .handler = calibration_post_handler,
+                                             .user_ctx = NULL};
+
 static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
@@ -596,6 +653,8 @@ static httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &root_post);
         httpd_register_uri_handler(server, &settings_get);
         httpd_register_uri_handler(server, &settings_post);
+        httpd_register_uri_handler(server, &calibration_post);
+        httpd_register_uri_handler(server, &calibration_get);
         return server;
     }
 

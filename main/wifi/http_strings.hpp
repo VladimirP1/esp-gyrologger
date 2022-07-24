@@ -1030,4 +1030,202 @@ const char js_wasm_decoder_1[] = R"--(",
     }
 </script>)--";
 
+const char html_calibration[] = R"--(
+<!doctype html>
+<html lang=en>
+<head>
+    <meta charset=utf-8>
+    <title>EspLog</title>
+</head>
+<body>
+    <h1>Accelerometer calibration</h1>
+    <div class="scene_container">
+        <div class="scene">
+            <div id="point_container">
+            </div>
+            <div class="big_circle object3d"></div>
+            <div class="hor_bar object3d"></div>
+            <div class="ver_bar object3d"></div>
+        </div>
+    </div>
+    <div style="padding:0.5rem;" id="calc_result">---</div>
+    <br>
+    <div class="button" onclick="add_point();">Add point</div>
+    <div class="button" onclick="remove_last_point();">Remove last</div>
+    <div class="button" onclick="clear_points();">Clear points</div>
+    <br>
+    <div class="button" onclick="sphere_fit(points);">Calculate offsets</div>
+    <div class="button" id="save_button" onclick="save_offsets(offsets);">Save to flash</div>
+</body>
+<style>
+    .button {
+        display: inline-block;
+        border: 0.1rem solid black;
+        cursor: default;
+        margin: 0.2rem;
+        padding: 0.3rem;
+        user-select: none;
+    }
+
+    .button:hover {
+        background-color: lightgray;
+    }
+
+    .button:active {
+        background-color: gray;
+    }
+
+    .scene_container {
+        width: 22rem;
+        height: 22rem;
+        position: relative;
+    }
+
+    .scene {
+        width: 100%;
+        height: 100%;
+    }
+
+    .object3d {
+        position: absolute;
+        top: 0rem;
+        left: 0rem;
+    }
+
+    .big_circle {
+        border-radius: 11rem;
+        border: 0.1rem solid blue;
+
+        width: 20rem;
+        height: 20rem;
+        top: 1rem;
+        left: 1rem;
+    }
+
+    .hor_bar {
+        background-color: red;
+
+        width: 22.2rem;
+        height: 0.1rem;
+        transform: translate(0, 11rem) translate(0, -0.05rem);
+    }
+
+    .ver_bar {
+        background-color: green;
+
+        height: 22.2rem;
+        width: 0.1rem;
+        transform: translate(11rem, 0) translate(-0.05rem, 0);
+    }
+
+    .calib_point {
+        background-color: red;
+        border-radius: 1rem;
+
+        width: 0.7rem;
+        height: 0.7rem;
+    }
+</style>
+<script type="text/javascript">
+
+    function draw_points(points) {
+        let scene_mult = 10;
+        let scene_ofs = 1;
+        let container = document.getElementById("point_container");
+
+        container.innerHTML = '';
+
+        for (let i = 0; i < points.length; ++i) {
+            let x = scene_mult * (points[i][0] + 1) + scene_ofs;
+            let y = scene_mult * (points[i][1] + 1) + scene_ofs;
+            let z = scene_mult * (points[i][2]);
+            let elem = document.createElement("div");
+            elem.classList = "calib_point object3d";
+            elem.style.transform = `translate3d(${x}rem,${y}rem, ${z}rem) translate3d(-0.35rem, -0.35rem, 0)`;
+
+            container.appendChild(elem);
+        }
+    }
+
+    let points = [];
+    let offsets = [0,0,0];
+
+    function add_point() {
+        let xhr = new XMLHttpRequest();
+        xhr.responseType = 'json';
+        xhr.open('POST', '/calibration');
+        xhr.send("get_acceleration");
+        xhr.timeout = 2000;
+        xhr.onload = function () {
+            points.push(xhr.response.acceleration);
+            draw_points(points);
+            console.log(points);
+        };
+    }
+
+    function save_offsets(xyz) {
+        let btn = document.getElementById("save_button");
+        btn.style.color = "red";
+        let xhr = new XMLHttpRequest();
+        xhr.responseType = 'json';
+        xhr.open('POST', '/calibration');
+        xhr.send(`set_offsets_ug/${-Math.round(xyz[0] * 1e6)}/${-Math.round(xyz[1] * 1e6)}/${-Math.round(xyz[2] * 1e6)}`);
+        xhr.timeout = 2000;
+        xhr.onload = function () {
+            btn.style.color = "black";
+        };
+    }
+
+    function clear_points() {
+        points = [];
+        draw_points(points);
+    }
+
+    function remove_last_point() {
+        points.pop();
+        draw_points(points);
+    }
+
+    function sphere_fit(points) {
+        const lr = 1e-3;
+        const x = new Array(4).fill(0);
+        const f = new Array(points.length).fill(0);
+        for (let i = 0; i < points.length; ++i) {
+            for (let j = 0; j < 3; ++j) {
+                f[i] += points[i][j] * points[i][j];
+            }
+        }
+
+        console.log(f);
+
+        for (let t = 0; t < 1000000; ++t) {
+            for (let i = 0; i < points.length; ++i) {
+                let aa = -f[i];
+                for (let k = 0; k < 3; ++k) {
+                    aa += points[i][k] * x[k];
+                }
+                aa += x[3];
+                for (let k = 0; k < 3; ++k) {
+                    x[k] -= lr * 2 * aa * points[i][k];
+                }
+                x[3] -= lr * 2 * aa;
+            }
+        }
+
+        rad = Math.sqrt(x[0] * x[0] / 4 + x[1] * x[1] / 4 + x[2] * x[2] / 4 + x[3]);
+        cx = x[0] / 2;
+        cy = x[1] / 2;
+        cz = x[2] / 2;
+
+        let result_text = `X = ${cx.toFixed(4)}g, Y = ${cy.toFixed(4)}g, Z = ${cz.toFixed(4)}g, radius = ${rad.toFixed(4)}`;
+        document.getElementById("calc_result").innerText = result_text;
+
+        offsets = [cx, cy, cz];
+
+        return offsets;
+    }
+</script>
+</html>
+)--";
+
 }  // namespace

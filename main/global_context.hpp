@@ -36,8 +36,6 @@ typedef struct {
 
     FilterSettings filter_settings;
 
-    volatile bool pause_polling;
-    volatile bool continue_polling;
     volatile bool terminate_for_update;
     struct {
         SemaphoreHandle_t mutex;
@@ -57,6 +55,9 @@ typedef struct {
         int avg_logging_rate_bytes_min;
         uint32_t avg_sample_interval_ns;
         uint64_t last_block_time_us;
+
+        SemaphoreHandle_t accel_raw_mtx;
+        double accel_raw[3];
     } logger_control;
 
 } GlobalContext;

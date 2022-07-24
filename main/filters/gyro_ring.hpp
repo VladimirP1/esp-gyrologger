@@ -75,6 +75,12 @@ class Calibrator {
         err = calib_handle->get_item("ofs_z", g_ofs_z);
         if (err != ESP_OK) fail = true;
 
+        a_ofs_x = gctx.settings_manager->Get("accel_ofs_x") / kAccelToG;
+        a_ofs_y = gctx.settings_manager->Get("accel_ofs_y") / kAccelToG;
+        a_ofs_z = gctx.settings_manager->Get("accel_ofs_z") / kAccelToG;
+
+        ESP_LOGI(kLogTag, "Loaded accel offsets %d %d %d", a_ofs_x, a_ofs_y, a_ofs_z);
+
         if (fail) {
             ESP_LOGE(kLogTag, "Failed load gyro calibration");
             g_ofs_x = g_ofs_y = g_ofs_z = 0;
@@ -86,13 +92,20 @@ class Calibrator {
     void ProcessSample(sample &s) {
         auto &rs = std::get<raw_sample>(s.sample);
         RunGyroCalibration(s);
+        RunAccelCalibration(s);
+        
         rs.gx += g_ofs_x;
         rs.gy += g_ofs_y;
         rs.gz += g_ofs_z;
+
+        rs.ax += a_ofs_x;
+        rs.ay += a_ofs_y;
+        rs.az += a_ofs_z;
     }
 
    private:
     int g_ofs_x{}, g_ofs_y{}, g_ofs_z{};
+    int a_ofs_x{}, a_ofs_y{}, a_ofs_z{};
 
     int gyr_samples{};
     int64_t sum_gx{}, sum_gy{}, sum_gz{};
@@ -120,6 +133,26 @@ class Calibrator {
             sum_gy += rs.gy;
             sum_gz += rs.gz;
             gyr_samples -= 1;
+        }
+    }
+
+    void RunAccelCalibration(const sample &s) {
+        static int64_t prev_accel_export_time = esp_timer_get_time();
+        if (esp_timer_get_time() - prev_accel_export_time > 50000) {
+            prev_accel_export_time = esp_timer_get_time();
+            auto &rs = std::get<raw_sample>(s.sample);
+            quat::base_type ascale{kAccelToG / 16.0};
+            quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
+            static constexpr double lpf_k = 0.1;
+            if (xSemaphoreTake(gctx.logger_control.accel_raw_mtx, portMAX_DELAY)) {
+                gctx.logger_control.accel_raw[0] = lpf_k * static_cast<double>(accel.x) * 16.0 +
+                                                   (1 - lpf_k) * gctx.logger_control.accel_raw[0];
+                gctx.logger_control.accel_raw[1] = lpf_k * static_cast<double>(accel.y) * 16.0 +
+                                                   (1 - lpf_k) * gctx.logger_control.accel_raw[1];
+                gctx.logger_control.accel_raw[2] = lpf_k * static_cast<double>(accel.z) * 16.0 +
+                                                   (1 - lpf_k) * gctx.logger_control.accel_raw[2];
+                xSemaphoreGive(gctx.logger_control.accel_raw_mtx);
+            }
         }
     }
 
@@ -154,6 +187,12 @@ class GyroRing {
         gctx.filter_settings.dyn_q = gctx.settings_manager->Get("dyn_q");
         gctx.filter_settings.dyn_lr = gctx.settings_manager->Get("dyn_lr");
         gctx.filter_settings.dyn_lr_smooth = gctx.settings_manager->Get("dyn_lr_smooth");
+
+        double accel_corr_speed = gctx.settings_manager->Get("accel_corr_sp");
+        double accel_corr_lpf = gctx.settings_manager->Get("accel_corr_lp");
+
+        accel_corr_k1_ = quat::base_type{-accel_corr_speed * accel_corr_lpf};
+        accel_corr_k2_ = quat::base_type{1 - accel_corr_lpf};
     }
 
     void Init(int capacity, int chunk_size, uint32_t desired_interval) {
@@ -165,7 +204,8 @@ class GyroRing {
         ESP_LOGI(kLogTag, "inv_interval %f", (double)inv_desired_interval_);
     }
 
-    void Push(uint32_t dur_ns, int16_t gx, int16_t gy, int16_t gz, int16_t ax, int16_t ay, int16_t az, int flags) {
+    void Push(uint32_t dur_ns, int16_t gx, int16_t gy, int16_t gz, int16_t ax, int16_t ay,
+              int16_t az, int flags) {
         static int shadow_wptr{};
 
         auto &s = ring_[shadow_wptr];
@@ -270,9 +310,8 @@ class GyroRing {
                 } else {
                     corr = {};
                 }
-                accel_correction_ =
-                    quat::quat{(corr.axis_angle() * quat::base_type{-0.0001 * .01}) +
-                               (accel_correction_.axis_angle() * quat::base_type{.99})};
+                accel_correction_ = quat::quat{(corr.axis_angle() * accel_corr_k1_) +
+                                               (accel_correction_.axis_angle() * accel_corr_k2_)};
             }
 
             MaybeNormalize(quat_rptr_);
@@ -372,6 +411,8 @@ class GyroRing {
     int rptr_{}, sptr_{};
     quat::quat quat_rptr_{};
     quat::quat accel_correction_{};
+
+    quat::base_type accel_corr_k1_, accel_corr_k2_;
 
     DynamicNotch *notches_[36] = {};
     PtFilter *pts_[3] = {};
