@@ -24,6 +24,8 @@ The zip file will contain a readme file with a command line for flashing using [
 
 <img src="img/screenshot_settings.png" width="540"></img>
 
+<img src="img/screenshot_calibration.png" width="540"></img>
+
 #### EspLog PCB
 
 Four-layer 11 x 14 mm PCB with esp32-c3, 3.3v ldo and either bmi160 or lsm6dsr gyro.
