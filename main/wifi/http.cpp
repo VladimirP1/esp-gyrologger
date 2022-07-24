@@ -447,6 +447,11 @@ void IRAM_ATTR copy_flash_task(void* vargs) {
                                                        app_partition->address + ofs, buf_size);
     }
 
+    for (size_t ofs = 0; ofs + sector_size < storage_partition->size; ofs += sector_size) {
+        storage_partition->flash_chip->chip_drv->erase_sector(storage_partition->flash_chip,
+                                                              storage_partition->address + ofs);
+    }
+
     while (1)
         ;
 }
