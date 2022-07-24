@@ -15,7 +15,8 @@ The zip file will contain a readme file with a command line for flashing using [
 2. After flashing the firmware you should see a wifi network with SSID starting with "esplog_". Connect to that network with "12345678" password.
 3. Go to [http://192.168.4.1/settings](http://192.168.4.1/settings), enter the SDA and SCL pin numbers you have connected the IMU to, click "Apply".
 4. Reboot the board and go to [http://192.168.4.1](http://192.168.4.1). If the IMU is OK, "Avg gyro sample int. (ns)" should be non-zero.
-5. Now you can connect a button and a led to any free pins and assign the pin numbers in settings. NOTE: when recording is started using the button, wifi is disabled until you stop the recording using the button. This is done intentionally.
+5. Calibrate the accelerometer. For that you need to go to [http://192.168.4.1/calibration](http://192.168.4.1/calibration), add some calibration points (for example x-up, x-down, y-up, y-down, z-up, z-down). Hold your IMU stationary for some time before adding a points as the accelerometer data is low-pass filtered. Then click "Calculate offsets" and then "Save to flash".
+5. You can connect a button and a led to any free pins and assign the pin numbers in settings. NOTE: when recording is started using the button, wifi is disabled until you stop the recording using the button. This is done intentionally.
 
 ### Screenshots
 
