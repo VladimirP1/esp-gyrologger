@@ -8,7 +8,9 @@ This is a GyroFlow-compatible data logger firmware for the esp32 and esp32-c3 mi
 
 You can get these as separate modules or on a single board (EspLog)
 
-### How to flash and get started?
+### How to flash and get started with the DIY version?
+[YouYube tutorial](https://www.youtube.com/watch?v=SZeJi4hdDFE)
+
 1. Connect your IMU board to the ESP board. For esp32 it is recommended to connect SDA and SCL to pins 16 and 17 accordingly. For esp32-c3 - to pins 6 and 7.
 1. Download the firmware from github. You can find the latest build in "Artifacts" of the latest build from the "Actions" tab.
 The zip file will contain a readme file with a command line for flashing using [esptool](https://github.com/espressif/esptool/releases/tag/v4.1).
@@ -25,6 +27,12 @@ The zip file will contain a readme file with a command line for flashing using [
 <img src="img/screenshot_settings.png" width="540"></img>
 
 <img src="img/screenshot_calibration.png" width="540"></img>
+
+### Other resources
+
+[Test flight](https://www.youtube.com/watch?v=B9Z8ehW_aUw)
+
+[Video about workflow](https://www.youtube.com/watch?v=ldi0L7vc7pM)
 
 #### EspLog PCB
 
