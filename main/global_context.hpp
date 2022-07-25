@@ -55,6 +55,7 @@ typedef struct {
         int avg_logging_rate_bytes_min;
         uint32_t avg_sample_interval_ns;
         uint64_t last_block_time_us;
+        bool storage_failure;
 
         SemaphoreHandle_t accel_raw_mtx;
         double accel_raw[3];
