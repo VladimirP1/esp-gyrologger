@@ -73,6 +73,13 @@ void button_task(void* params) {
     }
 
     gpio_set_direction(btn_gpio, GPIO_MODE_INPUT);
+#if CONFIG_IDF_TARGET_ESP32C3
+    if (btn_gpio != 19 && btn_gpio != 18) {
+        gpio_set_pull_mode(btn_gpio, GPIO_PULLUP_ONLY);
+    }
+#elif CONFIG_IDF_TARGET_ESP32
+    gpio_set_pull_mode(btn_gpio, GPIO_PULLUP_ONLY);
+#endif
 
     static constexpr int kDebounceThreshold = 6;
     int debounce_counter = 0;
