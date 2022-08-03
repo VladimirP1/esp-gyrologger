@@ -93,10 +93,13 @@ class Calibrator {
         auto &rs = std::get<raw_sample>(s.sample);
         RunGyroCalibration(s);
         RunAccelCalibration(s);
-        
-        rs.gx += g_ofs_x;
-        rs.gy += g_ofs_y;
-        rs.gz += g_ofs_z;
+
+        rs.gx = std::max((int)std::numeric_limits<int16_t>::min(),
+                         std::min((int)std::numeric_limits<int16_t>::max(), rs.gx + g_ofs_x));
+        rs.gy = std::max((int)std::numeric_limits<int16_t>::min(),
+                         std::min((int)std::numeric_limits<int16_t>::max(), rs.gy + g_ofs_y));
+        rs.gz = std::max((int)std::numeric_limits<int16_t>::min(),
+                         std::min((int)std::numeric_limits<int16_t>::max(), rs.gz + g_ofs_z));
 
         rs.ax += a_ofs_x;
         rs.ay += a_ofs_y;
