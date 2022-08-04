@@ -112,13 +112,20 @@ void led_strip_task(void* params) {
         } else {
             // uint8_t v = (duty % 512 >= 256 ? 511 - duty : duty) * k / 100;
             // ESP_ERROR_CHECK(strip->set_pixel(strip, 0, 0, v, 0));
+            // ESP_ERROR_CHECK(strip->refresh(strip, 100));
             // duty = (duty + 4) % 512;
-            uint32_t r, g, b;
-            led_strip_hsv2rgb(duty, 100, k, &r, &g, &b);
-            ESP_ERROR_CHECK(strip->set_pixel(strip, 0, r, g, b));
-            duty = (duty + 1) % 360;
+
+            // uint32_t r, g, b;
+            // led_strip_hsv2rgb(duty, 100, k, &r, &g, &b);
+            // ESP_ERROR_CHECK(strip->set_pixel(strip, 0, r, g, b));
+            // duty = (duty + 1) % 360;
+            // ESP_ERROR_CHECK(strip->refresh(strip, 100));
+            // vTaskDelay(10 / portTICK_PERIOD_MS);
+
+            ESP_ERROR_CHECK(strip->set_pixel(strip, 0, 0, duty >= 10 ? k : 0, 0));
             ESP_ERROR_CHECK(strip->refresh(strip, 100));
-            vTaskDelay(10 / portTICK_PERIOD_MS);
+            duty = (duty + 1) % 20;
+            vTaskDelay(50 / portTICK_PERIOD_MS);
         }
     }
 }
