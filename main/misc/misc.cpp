@@ -9,6 +9,9 @@ extern "C" {
 #include <driver/gpio.h>
 #include <driver/sigmadelta.h>
 
+#include <driver/rmt.h>
+#include "led_strip/led_strip.h"
+
 #include <freertos/task.h>
 }
 
@@ -60,6 +63,62 @@ void led_task(void* params) {
                 dir = false;
                 goto duty_retry;
             }
+        }
+    }
+}
+
+void led_strip_task(void* params) {
+    led_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("led_pin"));
+
+    if (led_gpio < 0) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    rmt_config_t config = RMT_DEFAULT_CONFIG_TX(led_gpio, RMT_CHANNEL_0);
+    config.clk_div = 2;
+    ESP_ERROR_CHECK(rmt_config(&config));
+    ESP_ERROR_CHECK(rmt_driver_install(config.channel, 0, 0));
+    led_strip_config_t strip_config = LED_STRIP_DEFAULT_CONFIG(2, (led_strip_dev_t)config.channel);
+    led_strip_t* strip = led_strip_new_rmt_ws2812(&strip_config);
+    if (!strip) {
+        ESP_LOGE("led_strip_task", "install WS2812 driver failed");
+        vTaskDelete(nullptr);
+        return;
+    }
+    ESP_ERROR_CHECK(strip->clear(strip, 100));
+
+    uint32_t duty{};
+    uint8_t k = gctx.settings_manager->Get("led_bright");
+
+    while (true) {
+        if (gctx.logger_control.busy &&
+            (esp_timer_get_time() - gctx.logger_control.last_block_time_us <= 2000000ULL) &&
+            !gctx.logger_control.storage_failure) {
+            ESP_ERROR_CHECK(strip->set_pixel(strip, 0, k, 0, 0));
+            ESP_ERROR_CHECK(strip->refresh(strip, 100));
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            ESP_ERROR_CHECK(strip->set_pixel(strip, 0, 0, 0, 0));
+            ESP_ERROR_CHECK(strip->refresh(strip, 100));
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            ESP_ERROR_CHECK(strip->set_pixel(strip, 0, k, 0, 0));
+            ESP_ERROR_CHECK(strip->refresh(strip, 100));
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            ESP_ERROR_CHECK(strip->set_pixel(strip, 0, 0, 0, 0));
+            ESP_ERROR_CHECK(strip->refresh(strip, 100));
+            vTaskDelay(800 / portTICK_PERIOD_MS);
+            duty = 0;
+
+        } else {
+            // uint8_t v = (duty % 512 >= 256 ? 511 - duty : duty) * k / 100;
+            // ESP_ERROR_CHECK(strip->set_pixel(strip, 0, 0, v, 0));
+            // duty = (duty + 4) % 512;
+            uint32_t r, g, b;
+            led_strip_hsv2rgb(duty, 100, k, &r, &g, &b);
+            ESP_ERROR_CHECK(strip->set_pixel(strip, 0, r, g, b));
+            duty = (duty + 1) % 360;
+            ESP_ERROR_CHECK(strip->refresh(strip, 100));
+            vTaskDelay(10 / portTICK_PERIOD_MS);
         }
     }
 }

@@ -31,6 +31,8 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"sda_pin", "SDA pin", -1.0, 64.0, -1},
     {"scl_pin", "SCL pin", -1.0, 64.0, -1},
     {"led_pin", "Led pin", -1.0, 64.0, -1},
+    {"led_type", "Led type(0 = normal, 1 = ws2812)", 0, 1, 0},
+    {"led_bright", "Ws2812 led brightness (0-100)", 0, 100, 8},
     {"btn_pin", "Button pin", -1.0, 64.0, -1},
     {"wifi_2dbm", "Set TX power to 2dbm", 0.0, 1.0, 1.0},
     {"wifi_stop_act", "Disable wifi when started with button", 0.0, 1.0, 1.0},

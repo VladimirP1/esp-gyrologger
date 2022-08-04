@@ -65,7 +65,11 @@ void app_main_cpp(void) {
         ESP_LOGW(TAG, "Please assign i2c gpio pins!");
     }
 
-    xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
+    if (gctx.settings_manager->Get("led_type") < 0.5) {
+        xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
+    } else {
+        xTaskCreate(led_strip_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
+    }
     xTaskCreate(button_task, "button-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
     // xTaskCreate(camera_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
 
