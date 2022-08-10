@@ -19,6 +19,9 @@ struct FilterSettings {
     int pt_order{};
     int pt_cutoff{};
 
+    int accel_pt_order{};
+    double accel_pt_cutoff{};
+
     int dyn_count{};
     int dyn_freq_min{};
     int dyn_freq_max{};
@@ -33,6 +36,7 @@ typedef struct {
 
     uint8_t gyro_i2c_adr;
     double gyro_sr;
+    double accel_sr;
 
     FilterSettings filter_settings;
 
@@ -59,6 +63,8 @@ typedef struct {
 
         SemaphoreHandle_t accel_raw_mtx;
         double accel_raw[3];
+
+        float incline_error;
     } logger_control;
 
 } GlobalContext;

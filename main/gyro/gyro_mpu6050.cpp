@@ -132,6 +132,7 @@ bool probe_mpu6050(uint8_t dev_adr) {
 
 void gyro_mpu6050_task(void *params_pvoid) {
     gctx.gyro_sr = 2000.0;
+    gctx.accel_sr = 2000.0;
     
     /* This is needed for 2k sample rate */
     mini_i2c_set_timing(500000);
