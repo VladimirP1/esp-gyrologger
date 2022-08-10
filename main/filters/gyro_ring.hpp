@@ -303,6 +303,7 @@ class GyroRing {
                         new PtFilter(gctx.filter_settings.accel_pt_order,
                                      gctx.filter_settings.accel_pt_cutoff, gctx.accel_sr);
                     gain_boost_cnt_ = gctx.accel_sr * 4;
+                    accel_gain_ = accel_gain_ * 100.0 / gctx.accel_sr;
                 }
 
                 quat::vec f_accel;
