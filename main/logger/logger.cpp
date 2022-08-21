@@ -56,8 +56,8 @@ void logger_task(void *params_pvoid) {
             vTaskDelete(nullptr);
         }
 
-        quat::quat *quat_block = gctx.gyro_ring->Work();
-        if (!quat_block) {
+        GyroRing::WorkResult work_result = gctx.gyro_ring->Work();
+        if (!work_result.quats) {
             vTaskDelay(1);
             continue;
         }
@@ -91,7 +91,7 @@ void logger_task(void *params_pvoid) {
                     }
                 }
 
-                auto tmp = encoder.encode_block(quat_block);
+                auto tmp = encoder.encode_block(work_result.quats);
 
                 auto &bytes_to_write = tmp.first;
                 auto &max_error_rad = tmp.second;
@@ -116,6 +116,14 @@ void logger_task(void *params_pvoid) {
                 ESP_LOGI(TAG, "%d bytes, capacity = %.2f h, max_error = % .4f ", (int)out_buf_size,
                          3000000 / (out_buf_size / elapsed) / 60 / 60,
                          float(max_error_rad) * 180 / M_PI);
+
+                // Dump accelerometer data
+                if (work_result.accels_len) {
+                    uint8_t accel_count = work_result.accels_len / 3;
+                    fwrite(&accel_count, 1, 1, f);
+                    fwrite(&work_result.accels, 2, work_result.accels_len, f);
+                    ESP_LOGI(TAG, "%d bytes of accelerometer data", accel_count * 6);
+                }
 
             } else {
                 if (f) {

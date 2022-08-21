@@ -180,6 +180,12 @@ class Calibrator {
 
 class GyroRing {
    public:
+    struct WorkResult {
+        quat::quat *quats;
+        int16_t *accels;
+        int accels_len;
+    };
+
     GyroRing() {
         gctx.filter_settings.disable_accel = gctx.settings_manager->Get("disable_accel") > 0.5;
         gctx.filter_settings.pt_order = gctx.settings_manager->Get("pt_count");
@@ -192,9 +198,6 @@ class GyroRing {
         gctx.filter_settings.dyn_q = gctx.settings_manager->Get("dyn_q");
         gctx.filter_settings.dyn_lr = gctx.settings_manager->Get("dyn_lr");
         gctx.filter_settings.dyn_lr_smooth = gctx.settings_manager->Get("dyn_lr_smooth");
-
-        accel_gain_ = gctx.settings_manager->Get("accel_gain");
-        accel_grav_tol_ = gctx.settings_manager->Get("accel_grav_tol");
     }
 
     void Init(int capacity, int chunk_size, uint32_t desired_interval) {
@@ -223,16 +226,19 @@ class GyroRing {
         taskEXIT_CRITICAL_ISR(&ptr_mux_);
     }
 
-    quat::quat *Work() {
+    WorkResult Work() {
         taskENTER_CRITICAL(&ptr_mux_);
         int cached_wptr = wptr_;
         taskEXIT_CRITICAL(&ptr_mux_);
 
         // ESP_LOGI(kLogTag, "rptr: %d, wptr: %d, count: %d", rptr_, cached_wptr,
         //  ((cached_wptr + ring_.size()) - rptr_) % ring_.size());
+        static int accel_cnt = 0;
 
         if (quats_chunk_.size() >= chunk_size_) {
             quats_chunk_.clear();
+            accel_chunk_.clear();
+            accel_cnt = 0;
         }
 
         // Integrate gyro and LPF
@@ -289,9 +295,11 @@ class GyroRing {
 
             quat::quat pred = quat_rptr_ * quat::quat{gyro};
 
+            static quat::vec f_accel;
             if (!gctx.filter_settings.disable_accel && rs.flags & kFlagHaveAccel) {
                 quat::base_type ascale{kAccelToG / 256};
                 quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
+                accel = pred.rotate_point(accel);
                 if (!pts_accel_[0]) {
                     pts_accel_[0] =
                         new PtFilter(gctx.filter_settings.accel_pt_order,
@@ -302,42 +310,25 @@ class GyroRing {
                     pts_accel_[2] =
                         new PtFilter(gctx.filter_settings.accel_pt_order,
                                      gctx.filter_settings.accel_pt_cutoff, gctx.accel_sr);
-                    gain_boost_cnt_ = gctx.accel_sr * 4;
-                    accel_gain_ = accel_gain_ * 100.0 / gctx.accel_sr;
                 }
 
-                quat::vec f_accel;
                 f_accel.x = pts_accel_[0]->apply(accel.x);
                 f_accel.y = pts_accel_[1]->apply(accel.y);
                 f_accel.z = pts_accel_[2]->apply(accel.z);
-
-                quat::base_type error_256 = abs(f_accel.norm() - quat::base_type{1.0 / 256.0});
-                quat::base_type gain{exp(-accel_grav_tol_ * 256 * static_cast<float>(error_256)) *
-                                     accel_gain_};
-
-                f_accel = f_accel.normalized();
-                quat::vec gp = pred.rotate_point(f_accel);
-                auto dq0 = (gp.z + quat::base_type{1.0}) * quat::base_type{0.5};
-                quat::quat corr = quat::quat(quat::base_type{dq0}, -gp.y / quat::base_type{2.0},
-                                             gp.x / quat::base_type{2.0}, quat::base_type{0.0})
-                                      .normalized()
-                                      .conj();
-
-                gctx.logger_control.incline_error =
-                    ((float)(corr.axis_angle() / quat::base_type{4}).norm()) * 4.0 * 180.0 / M_PI;
-
-                if (loglevel >= 3) {
-                    static uint8_t cnt;
-                    if (cnt++ == 0)
-                        printf("corr: %f  gain: %f", gctx.logger_control.incline_error,
-                               (double)gain);
+            }
+            {
+                static int accel_div{};
+                if (!accel_div) {
+                    accel_div = gctx.gyro_sr / 10.0;
                 }
 
-                if (!gain_boost_cnt_) {
-                    pred = quat::quat{corr.axis_angle() * gain} * pred;
-                } else {
-                    pred = quat::quat{corr.axis_angle() * quat::base_type{0.01}} * pred;
-                    --gain_boost_cnt_;
+                if (++accel_cnt % accel_div == 0) {
+                    const int scale = 256 * 32768 / 16;
+                    accel_chunk_.push_back((int16_t)(f_accel.x * scale));
+                    accel_chunk_.push_back((int16_t)(f_accel.y * scale));
+                    accel_chunk_.push_back((int16_t)(f_accel.z * scale));
+                    printf("%f %f %f %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) * 256,
+                           ((float)f_accel.z) * 256, accel_chunk_.size() / 3);
                 }
             }
 
@@ -354,7 +345,7 @@ class GyroRing {
         int samples_buffered = ((cached_wptr + ring_.size()) - sptr_) % ring_.size();
 
         if (samples_buffered < kResamlpingLag) {
-            return nullptr;
+            return {.quats = nullptr};
         }
 
         // ESP_LOGI(kLogTag, "%d %u", samples_buffered, ring_[sptr_].duration_ns);
@@ -364,6 +355,8 @@ class GyroRing {
 
         if (quats_chunk_.size() >= chunk_size_) {
             quats_chunk_.clear();
+            accel_chunk_.clear();
+            accel_cnt = 0;
         }
 
         while (samples_buffered) {
@@ -409,11 +402,13 @@ class GyroRing {
                     if (loglevel >= 2) {
                         ESP_LOGI(kLogTag, "produced chunk size %d", chunk_size_);
                     }
-                    return quats_chunk_.data();
+                    return {.quats = quats_chunk_.data(),
+                            .accels = accel_chunk_.data(),
+                            .accels_len = (int)accel_chunk_.size()};
                 }
             }
         }
-        return nullptr;
+        return {.quats = nullptr};
     }
 
    private:
@@ -440,12 +435,10 @@ class GyroRing {
     int rptr_{}, sptr_{};
     quat::quat quat_rptr_{};
 
-    float accel_grav_tol_, accel_gain_;
-    int gain_boost_cnt_{};
-
     DynamicNotch *notches_[36] = {};
     PtFilter *pts_[3] = {};
     PtFilter *pts_accel_[3] = {};
 
     std::vector<quat::quat> quats_chunk_;
+    std::vector<int16_t> accel_chunk_;
 };
