@@ -32,12 +32,6 @@ int get_output_size() { return output.size(); }
 EMSCRIPTEN_KEEPALIVE
 int* get_output_ptr() { return output.data(); }
 
-static quat::vec decode_accel(int16_t* ptr) {
-    const double scale = 256 * 32768 / 16;
-    return quat::vec{quat::base_type{ptr[0] / scale}, quat::base_type{ptr[1] / scale},
-                     quat::base_type{ptr[2] / scale}};
-}
-
 EMSCRIPTEN_KEEPALIVE
 int decode() {
     output.clear();
@@ -51,11 +45,12 @@ int decode() {
         int16_t* accel_data = (int16_t*)input.data() + pos;
         pos += 6 * accel_count;
 
+        int ascale = (256 * 32768) / (10000 * 16);
+
         int i = 0;
         for (auto& q : dquats) {
             quat::vec rv = (q.conj() * prev_quat).axis_angle();
-            quat::vec accel = decode_accel(accel_data + std::min(i++ / 55, accel_count - 1) * 3);
-            accel = q.conj().rotate_point(accel);
+            int16_t* accel_blk = accel_data + std::min(i++ / 55, accel_count - 1) * 3;
             prev_quat = q;
             if (ztime != 0) {
                 double scale = sample_rate * gscale;
@@ -64,9 +59,9 @@ int decode() {
                 output.push_back((int)(double(rv.x) * scale));
                 output.push_back((int)(double(rv.y) * scale));
                 output.push_back((int)(double(rv.z) * scale));
-                output.push_back((int)(double(accel.x) * ascale * 256.0));
-                output.push_back((int)(double(accel.y) * ascale * 256.0));
-                output.push_back((int)(double(accel.z) * ascale * 256.0));
+                output.push_back((int)(accel_blk[0] / ascale));
+                output.push_back((int)(accel_blk[1] / ascale));
+                output.push_back((int)(accel_blk[2] / ascale));
             }
             ztime++;
         }
