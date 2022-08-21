@@ -49,6 +49,7 @@ int decode() {
 
         int accel_count = input[pos++];
         int16_t* accel_data = (int16_t*)input.data() + pos;
+        pos += 6 * accel_count;
 
         int i = 0;
         for (auto& q : dquats) {
