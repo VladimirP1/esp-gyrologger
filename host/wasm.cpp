@@ -42,7 +42,7 @@ int decode() {
         pos += decoded_bytes;
 
         int accel_count = input[pos++];
-        int16_t* accel_data = (int16_t*)input.data() + pos;
+        int16_t* accel_data = (int16_t*)(input.data() + pos);
         pos += 6 * accel_count;
 
         int ascale = (256 * 32768) / (10000 * 16);
