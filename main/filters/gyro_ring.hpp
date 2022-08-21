@@ -187,7 +187,6 @@ class GyroRing {
     };
 
     GyroRing() {
-        gctx.filter_settings.disable_accel = gctx.settings_manager->Get("disable_accel") > 0.5;
         gctx.filter_settings.pt_order = gctx.settings_manager->Get("pt_count");
         gctx.filter_settings.pt_cutoff = gctx.settings_manager->Get("pt_cutoff");
         gctx.filter_settings.accel_pt_order = gctx.settings_manager->Get("a_pt_count");
@@ -296,7 +295,7 @@ class GyroRing {
             quat::quat pred = quat_rptr_ * quat::quat{gyro};
 
             static quat::vec f_accel;
-            if (!gctx.filter_settings.disable_accel && rs.flags & kFlagHaveAccel) {
+            if (rs.flags & kFlagHaveAccel) {
                 quat::base_type ascale{kAccelToG / 256};
                 quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
                 accel = pred.rotate_point(accel);
@@ -315,6 +314,7 @@ class GyroRing {
                 f_accel.x = pts_accel_[0]->apply(accel.x);
                 f_accel.y = pts_accel_[1]->apply(accel.y);
                 f_accel.z = pts_accel_[2]->apply(accel.z);
+                f_accel = pred.conj().rotate_point(f_accel);
             }
             {
                 static int accel_div{};
@@ -324,11 +324,11 @@ class GyroRing {
 
                 if (++accel_cnt % accel_div == 0) {
                     const int scale = 256 * 32768 / 16;
-                    accel_chunk_.push_back((int16_t)(f_accel.x * scale));
-                    accel_chunk_.push_back((int16_t)(f_accel.y * scale));
-                    accel_chunk_.push_back((int16_t)(f_accel.z * scale));
-                    printf("%f %f %f %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) * 256,
-                           ((float)f_accel.z) * 256, accel_chunk_.size() / 3);
+                    accel_chunk_.push_back(-(int16_t)(((float)f_accel.x) * scale));
+                    accel_chunk_.push_back(-(int16_t)(((float)f_accel.y) * scale));
+                    accel_chunk_.push_back(-(int16_t)(((float)f_accel.z) * scale));
+                    printf("%f %f %f %d %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) * 256,
+                           ((float)f_accel.z) * 256, accel_chunk_.size() / 3, (int)(int16_t)(((float)f_accel.x) * scale));
                 }
             }
 

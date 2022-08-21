@@ -15,7 +15,6 @@ class GyroRing;
 class SettingsManager;
 
 struct FilterSettings {
-    bool disable_accel{};
     int pt_order{};
     int pt_cutoff{};
 
@@ -63,8 +62,6 @@ typedef struct {
 
         SemaphoreHandle_t accel_raw_mtx;
         double accel_raw[3];
-
-        float incline_error;
     } logger_control;
 
 } GlobalContext;

@@ -121,7 +121,7 @@ void logger_task(void *params_pvoid) {
                 if (work_result.accels_len) {
                     uint8_t accel_count = work_result.accels_len / 3;
                     fwrite(&accel_count, 1, 1, f);
-                    fwrite(&work_result.accels, 2, work_result.accels_len, f);
+                    fwrite(work_result.accels, 2, work_result.accels_len, f);
                     ESP_LOGI(TAG, "%d bytes of accelerometer data", accel_count * 6);
                 }
 
