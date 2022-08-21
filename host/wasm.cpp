@@ -55,7 +55,7 @@ int decode() {
         for (auto& q : dquats) {
             quat::vec rv = (q.conj() * prev_quat).axis_angle();
             quat::vec accel = decode_accel(accel_data + std::min(i++ / 55, accel_count - 1) * 3);
-            // accel = rv.conj().rotate_point(accel);
+            accel = q.conj().rotate_point(accel);
             prev_quat = q;
             if (ztime != 0) {
                 double scale = sample_rate * gscale;
