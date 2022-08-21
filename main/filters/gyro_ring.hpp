@@ -189,8 +189,8 @@ class GyroRing {
     GyroRing() {
         gctx.filter_settings.pt_order = gctx.settings_manager->Get("pt_count");
         gctx.filter_settings.pt_cutoff = gctx.settings_manager->Get("pt_cutoff");
-        gctx.filter_settings.accel_pt_order = gctx.settings_manager->Get("a_pt_count");
-        gctx.filter_settings.accel_pt_cutoff = gctx.settings_manager->Get("a_pt_cutoff");
+        gctx.filter_settings.accel_pt_order = gctx.settings_manager->Get("acc_pt_count");
+        gctx.filter_settings.accel_pt_cutoff = gctx.settings_manager->Get("acc_pt_cutoff");
         gctx.filter_settings.dyn_count = gctx.settings_manager->Get("dyn_count");
         gctx.filter_settings.dyn_freq_min = gctx.settings_manager->Get("dyn_freq_min");
         gctx.filter_settings.dyn_freq_max = gctx.settings_manager->Get("dyn_freq_max");
@@ -315,6 +315,7 @@ class GyroRing {
                 f_accel.y = pts_accel_[1]->apply(accel.y);
                 f_accel.z = pts_accel_[2]->apply(accel.z);
                 f_accel = pred.conj().rotate_point(f_accel);
+                // printf("accel\n");
             }
             {
                 static int accel_div{};
