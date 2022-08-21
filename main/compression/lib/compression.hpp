@@ -219,7 +219,7 @@ class Coder {
                 RansEncPut(&state, &compressed_ptr, start, freq, 15);
                 checksum += static_cast<uint8_t>(*data_end);
                 if (compressed_ptr - compressed_block.data() < 16) {
-                    printf("scale = %d, i_var = %d\n", qp.scale, i_var);
+                    // printf("scale = %d, i_var = %d\n", qp.scale, i_var);
                     // abort();
                     qp.scale = std::min(qp.scale + 2, 22);
                     --tr;
@@ -247,11 +247,16 @@ class Coder {
         return {compressed_block, max_angle_error_rad};
     }
 
-    std::tuple<size_t, std::vector<quat::quat>, int> decode_block(uint8_t* compressed_data) {
+    std::tuple<size_t, std::vector<quat::quat>, int> decode_block(uint8_t* compressed_data,
+                                                                  int size = -1) {
         int scale = compressed_data[0];
         int i_var = compressed_data[1] & 0x1f;
         uint8_t checksum = compressed_data[1] >> 5;
         uint8_t own_checksum = 0;
+
+        if (size >= 0 && size < 6) {
+            return {};
+        }
 
         LaplaceModel mdl(i_var);
         RansState rans_state;
@@ -265,6 +270,9 @@ class Coder {
             int8_t* upd_ptr = &upd.x;
             uint8_t upd_idx = 0;
             for (size_t i = 0; i < 3; ++i) {
+                if (size > 0 && size - (decode_ptr - compressed_data) < 4) {
+                    return {};
+                }
                 int sym = mdl.icdf(RansDecGet(&rans_state, 15));
                 upd_ptr[upd_idx++] = sym;
                 int start = mdl.cdf(sym);
@@ -284,7 +292,8 @@ class Coder {
         own_checksum &= 0x7;
         if (checksum != own_checksum) {
             // printf("checksum mismatch %d, %d\n", checksum, own_checksum);
-            abort();
+            // abort();
+            return {};
         }
         return {decode_ptr - compressed_data, quats, scale};
     }
