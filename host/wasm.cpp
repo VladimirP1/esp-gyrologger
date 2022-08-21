@@ -48,7 +48,7 @@ int decode() {
         pos += decoded_bytes;
 
         int accel_count = input[pos++];
-        int16_t* accel_data = (int16_t*)input + pos;
+        int16_t* accel_data = (int16_t*)input.data() + pos;
 
         int i = 0;
         for (auto& q : dquats) {
@@ -63,9 +63,9 @@ int decode() {
                 output.push_back((int)(double(rv.x) * scale));
                 output.push_back((int)(double(rv.y) * scale));
                 output.push_back((int)(double(rv.z) * scale));
-                output.push_back((int)(double(gravity.x) * ascale * 256.0));
-                output.push_back((int)(double(gravity.y) * ascale * 256.0));
-                output.push_back((int)(double(gravity.z) * ascale * 256.0));
+                output.push_back((int)(double(accel.x) * ascale * 256.0));
+                output.push_back((int)(double(accel.y) * ascale * 256.0));
+                output.push_back((int)(double(accel.z) * ascale * 256.0));
             }
             ztime++;
         }
