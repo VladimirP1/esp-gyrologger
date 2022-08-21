@@ -40,11 +40,17 @@ int decode() {
             decoder.decode_block(input.data() + pos, input.size() - pos);
         if (fail || !decoded_bytes) break;
         pos += decoded_bytes;
-        for (auto& q : dquats) {
-            quat::vec rv = (q.conj() * prev_quat).axis_angle();
-            quat::vec gravity = q.conj().rotate_point(
-                {quat::base_type{}, quat::base_type{}, quat::base_type{-1.0}});
 
+        int accel_count = input[pos++];
+        int16_t* accel_data = (int16_t*)(input.data() + pos);
+        pos += 6 * accel_count;
+
+        int ascale = (256 * 32768) / (10000 * 16);
+
+        int i = 0;
+        for (auto& q : dquats) {
+            int i_lim = std::min(i++ / 55, accel_count - 1);
+            quat::vec rv = (q.conj() * prev_quat).axis_angle();
             prev_quat = q;
             if (ztime != 0) {
                 double scale = sample_rate * gscale;
@@ -53,9 +59,9 @@ int decode() {
                 output.push_back((int)(double(rv.x) * scale));
                 output.push_back((int)(double(rv.y) * scale));
                 output.push_back((int)(double(rv.z) * scale));
-                output.push_back((int)(double(gravity.x) * ascale));
-                output.push_back((int)(double(gravity.y) * ascale));
-                output.push_back((int)(double(gravity.z) * ascale));
+                output.push_back((int)(accel_data[0 + 3 * i_lim]));
+                output.push_back((int)(accel_data[1 + 3 * i_lim]));
+                output.push_back((int)(accel_data[2 + 3 * i_lim]));
             }
             ztime++;
         }

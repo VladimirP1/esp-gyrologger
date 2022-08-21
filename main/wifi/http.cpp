@@ -231,8 +231,6 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
 
     entry("Avg gyro sample int. (ns)", std::to_string(gctx.logger_control.avg_sample_interval_ns));
 
-    entry("Incine error (deg)", std::to_string(gctx.logger_control.incline_error));
-
     auto free_space = get_free_space_kb();
     entry("Free space (kBytes)", std::to_string(free_space.first));
 
