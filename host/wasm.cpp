@@ -49,6 +49,7 @@ int decode() {
 
         int i = 0;
         for (auto& q : dquats) {
+            int i_lim = std::min(i++ / 55, accel_count - 1);
             quat::vec rv = (q.conj() * prev_quat).axis_angle();
             prev_quat = q;
             if (ztime != 0) {
@@ -58,9 +59,9 @@ int decode() {
                 output.push_back((int)(double(rv.x) * scale));
                 output.push_back((int)(double(rv.y) * scale));
                 output.push_back((int)(double(rv.z) * scale));
-                output.push_back((int)(accel_data[0]));
-                output.push_back((int)(accel_data[1]));
-                output.push_back((int)(accel_data[2]));
+                output.push_back((int)(accel_data[0 + 3 * i_lim]));
+                output.push_back((int)(accel_data[1 + 3 * i_lim]));
+                output.push_back((int)(accel_data[2 + 3 * i_lim]));
             }
             ztime++;
         }
