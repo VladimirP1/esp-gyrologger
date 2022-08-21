@@ -59,9 +59,9 @@ int decode() {
                 output.push_back((int)(double(rv.x) * scale));
                 output.push_back((int)(double(rv.y) * scale));
                 output.push_back((int)(double(rv.z) * scale));
-                output.push_back((int)(accel_blk[0] / ascale));
-                output.push_back((int)(accel_blk[1] / ascale));
-                output.push_back((int)(accel_blk[2] / ascale));
+                output.push_back((int)(accel_blk[0]));
+                output.push_back((int)(accel_blk[1]));
+                output.push_back((int)(accel_blk[2]));
             }
             ztime++;
         }
