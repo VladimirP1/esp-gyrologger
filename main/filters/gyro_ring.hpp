@@ -328,8 +328,8 @@ class GyroRing {
                     accel_chunk_.push_back(-(int16_t)(((float)f_accel.x) * scale));
                     accel_chunk_.push_back(-(int16_t)(((float)f_accel.y) * scale));
                     accel_chunk_.push_back(-(int16_t)(((float)f_accel.z) * scale));
-                    printf("%f %f %f %d %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) * 256,
-                           ((float)f_accel.z) * 256, accel_chunk_.size() / 3, (int)(int16_t)(((float)f_accel.x) * scale));
+                    // printf("%f %f %f %d %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) * 256,
+                        //    ((float)f_accel.z) * 256, accel_chunk_.size() / 3, (int)(int16_t)(((float)f_accel.x) * scale));
                 }
             }
 

@@ -1,3 +1,3 @@
 #pragma once
 
-void camera_task(void* param);
+void cam_control_task(void* param);

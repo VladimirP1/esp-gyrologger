@@ -64,6 +64,7 @@ typedef struct {
         double accel_raw[3];
     } logger_control;
 
+    bool sta_enabled;
 } GlobalContext;
 
 extern GlobalContext gctx;
