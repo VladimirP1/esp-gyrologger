@@ -71,7 +71,7 @@ void app_main_cpp(void) {
         xTaskCreate(led_strip_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
     }
     xTaskCreate(button_task, "button-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
-    // xTaskCreate(camera_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 3, NULL);
+    xTaskCreate(cam_control_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
 
     http_init();
 }
