@@ -63,10 +63,12 @@ static void wifi_init_apsta() {
     if (gctx.settings_manager->Get("wifi_2dbm") > 0.5) {
         ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(8));
     }
-    ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
     if (gctx.sta_enabled) {
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
         ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_STA, &wifi_config_sta));
         ESP_ERROR_CHECK(esp_wifi_connect());
+    } else {
+        ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_AP));
     }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
     ESP_LOGI(TAG, "wifi_init_apsta finished.");
