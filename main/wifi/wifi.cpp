@@ -20,6 +20,12 @@ extern "C" {
 
 static const char *TAG = "wifi";
 
+static void retry_wifi_task(void *param) {
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+    esp_wifi_connect();
+    vTaskDelete(nullptr);
+}
+
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                                void *event_data) {
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
@@ -34,7 +40,7 @@ static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t e
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_START) {
         esp_wifi_connect();
     } else if (event_base == WIFI_EVENT && event_id == WIFI_EVENT_STA_DISCONNECTED) {
-        esp_wifi_connect();
+        xTaskCreate(retry_wifi_task, "retry-wifi", 4096, NULL, configMAX_PRIORITIES - 8, NULL);
         ESP_LOGI(TAG, "retry to connect to the AP");
     }
 }

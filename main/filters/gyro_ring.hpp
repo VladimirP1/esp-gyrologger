@@ -36,6 +36,11 @@ struct sample {
     std::variant<raw_sample, quat::quat> sample;
 };
 
+struct acc_sample {
+    int gyro_ref;
+    int16_t acc[3];
+};
+
 static constexpr int kFlagHaveAccel = 1;
 static constexpr char kLogTag[] = "gyro_ring";
 
@@ -203,6 +208,7 @@ class GyroRing {
         this->chunk_size_ = chunk_size;
         this->desired_interval_ = desired_interval;
         ring_.resize(capacity);
+        acc_ring_.resize(20);
         quats_chunk_.reserve(chunk_size);
         inv_desired_interval_ = quat::base_type{1.0 / desired_interval_};
         ESP_LOGI(kLogTag, "inv_interval %f", (double)inv_desired_interval_);
@@ -325,11 +331,15 @@ class GyroRing {
 
                 if (++accel_cnt % accel_div == 0) {
                     const int scale = 256 * 32768 / 16;
-                    accel_chunk_.push_back(-(int16_t)(((float)f_accel.x) * scale));
-                    accel_chunk_.push_back(-(int16_t)(((float)f_accel.y) * scale));
-                    accel_chunk_.push_back(-(int16_t)(((float)f_accel.z) * scale));
-                    // printf("%f %f %f %d %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) * 256,
-                        //    ((float)f_accel.z) * 256, accel_chunk_.size() / 3, (int)(int16_t)(((float)f_accel.x) * scale));
+                    acc_ring_[acc_wptr_].gyro_ref = rptr_;
+                    acc_ring_[acc_wptr_].acc[0]= (int16_t)(-((float)f_accel.x) * scale);
+                    acc_ring_[acc_wptr_].acc[1]= (int16_t)(-((float)f_accel.y) * scale);
+                    acc_ring_[acc_wptr_].acc[2]= (int16_t)(-((float)f_accel.z) * scale);
+                    acc_wptr_ = (acc_wptr_ + 1) % acc_ring_.size();
+                    // printf("%f %f %f %d %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) *
+                    // 256,
+                    //    ((float)f_accel.z) * 256, accel_chunk_.size() / 3,
+                    //    (int)(int16_t)(((float)f_accel.x) * scale));
                 }
             }
 
@@ -366,6 +376,12 @@ class GyroRing {
                     int next_sptr = (sptr_ + 1) % ring_.size();
                     uint32_t next_sptr_ts = sptr_ts_ + ring_[next_sptr].duration_ns;
                     if (next_sptr_ts < interp_ts_) {
+                        if (sptr_ == acc_ring_[acc_rptr_].gyro_ref) {
+                            accel_chunk_.push_back(acc_ring_[acc_rptr_].acc[0]);
+                            accel_chunk_.push_back(acc_ring_[acc_rptr_].acc[1]);
+                            accel_chunk_.push_back(acc_ring_[acc_rptr_].acc[2]);
+                            acc_rptr_ = (acc_rptr_ + 1) % acc_ring_.size();
+                        }
                         sptr_ = next_sptr;
                         sptr_ts_ = next_sptr_ts;
                         samples_buffered -= 1;
@@ -423,6 +439,7 @@ class GyroRing {
 
     int chunk_size_;
     std::vector<sample> ring_;
+    std::vector<acc_sample> acc_ring_;
     DurationSmoother dur_smoother{8000};
     Calibrator calib_{};
 
@@ -435,6 +452,8 @@ class GyroRing {
     volatile int wptr_{};
     int rptr_{}, sptr_{};
     quat::quat quat_rptr_{};
+
+    int acc_rptr_{}, acc_wptr_{};
 
     DynamicNotch *notches_[36] = {};
     PtFilter *pts_[3] = {};
