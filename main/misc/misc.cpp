@@ -131,6 +131,10 @@ void led_strip_task(void* params) {
 }
 
 void button_task(void* params) {
+    if (gctx.settings_manager->Get("loop_mode") > 0.5) {
+        gctx.logger_control.active = true;
+    }
+
     btn_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("btn_pin"));
 
     if (btn_gpio < 0) {

@@ -52,6 +52,7 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"dyn_lr_smooth", "Dyn filter tracking smoothing", 0.0001, 1.0, 0.005},
     {"cam_ctrl_type", "Cam control type", 0, 2, 0},
     {"trig_gpio_0", "Momentary ground pin", -1, 64.0, -1},
+    {"loop_mode", "Start logging on boot", 0, 1, 0},
 };
 
 static const std::initializer_list<StringSetting> kStringSettingDescriptor = {

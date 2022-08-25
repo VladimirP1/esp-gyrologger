@@ -6,6 +6,10 @@ extern "C" {
 #include <freertos/task.h>
 #include <freertos/queue.h>
 
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <dirent.h>
+
 #include <esp_log.h>
 #include <esp_console.h>
 #include <argtable3/argtable3.h>
@@ -17,23 +21,56 @@ extern "C" {
 
 #include "compression/lib/compression.hpp"
 #include "filters/gyro_ring.hpp"
+#include "storage/utils.hpp"
 
 #include "global_context.hpp"
 
 #define TAG "logger"
 
 static esp_err_t find_good_filename(char *buf) {
-    static constexpr char templ[] = "/spiflash/log%03d.bin";
-    for (int i = 100; i--;) {
-        snprintf(buf, 30, templ, i);
-        FILE *f = fopen(buf, "rb");
-        if (f) {
-            fclose(f);
-            snprintf(buf, 30, templ, i + 1);
-            return ESP_OK;
+    DIR *dp;
+    struct dirent *ep;
+    dp = opendir("/spiflash");
+    int max_idx = 0;
+    if (dp != NULL) {
+        while ((ep = readdir(dp))) {
+            static constexpr char templ[] = "/spiflash/%s";
+            std::string filename = ep->d_name;
+            int idx = std::stoi(filename.substr(3, 5));
+            max_idx = std::max(idx, max_idx);
         }
+        (void)closedir(dp);
+    } else {
+        ESP_LOGE(TAG, "Couldn't open the directory");
+        return ESP_FAIL;
     }
-    return ESP_FAIL;
+    static constexpr char templ[] = "/spiflash/log%05d.bin";
+    snprintf(buf, 30, templ, max_idx + 1);
+    return ESP_OK;
+}
+
+static esp_err_t delete_oldest() {
+    DIR *dp;
+    struct dirent *ep;
+    dp = opendir("/spiflash");
+    int min_idx = std::numeric_limits<int>::max();
+    if (dp != NULL) {
+        while ((ep = readdir(dp))) {
+            static constexpr char templ[] = "/spiflash/%s";
+            std::string filename = ep->d_name;
+            int idx = std::stoi(filename.substr(3, 5));
+            min_idx = std::min(idx, min_idx);
+        }
+        (void)closedir(dp);
+    } else {
+        ESP_LOGE(TAG, "Couldn't open the directory");
+        return ESP_FAIL;
+    }
+    static constexpr char templ[] = "/spiflash/log%05d.bin";
+    char buf[30];
+    snprintf(buf, 30, templ, min_idx);
+    unlink(buf);
+    return ESP_OK;
 }
 
 extern "C" {
@@ -148,6 +185,11 @@ void logger_task(void *params_pvoid) {
                 xSemaphoreGive(gctx.logger_control.mutex);
             }
             esp_vfs_fsync(fileno(f));
+
+            auto [free, total] = get_free_space_kb();
+            if (free < 30 && free > 0) {
+                delete_oldest();
+            }
         }
     }
 }

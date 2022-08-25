@@ -2,6 +2,8 @@
 
 #include "http.hpp"
 
+#include "storage/utils.hpp"
+
 extern "C" {
 #include <esp_http_server.h>
 #include <esp_event.h>
@@ -197,18 +199,6 @@ static esp_err_t format_get_handler(httpd_req_t* req) {
 
 static const httpd_uri_t format_get = {
     .uri = "/format", .method = HTTP_GET, .handler = format_get_handler, .user_ctx = NULL};
-
-static std::pair<int, int> get_free_space_kb() {
-    constexpr int kSectorBytes = 4096;
-    FATFS* fs;
-    DWORD fre_clust, fre_sect, tot_sect;
-    /* Get volume information and free clusters of drive 0 */
-    FRESULT res = f_getfree("0:", &fre_clust, &fs);
-    /* Get total sectors and free sectors */
-    tot_sect = (fs->n_fatent - 2) * fs->csize;
-    fre_sect = fre_clust * fs->csize;
-    return {kSectorBytes * fre_sect / 1024, kSectorBytes * tot_sect / 1024};
-}
 
 static esp_err_t status_get_handler(httpd_req_t* req) {
     std::string resp;
