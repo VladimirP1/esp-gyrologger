@@ -53,6 +53,7 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"cam_ctrl_type", "Cam control type", 0, 2, 0},
     {"trig_gpio_0", "Momentary ground pin", -1, 64.0, -1},
     {"loop_mode", "Start logging on boot", 0, 1, 0},
+    {"wifi_timeout", "Wifi auto off (seconds)", 0, 3600, 0},
 };
 
 static const std::initializer_list<StringSetting> kStringSettingDescriptor = {

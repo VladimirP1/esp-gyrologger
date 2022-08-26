@@ -20,6 +20,34 @@ extern "C" {
 
 static const char *TAG = "wifi";
 
+static int timeout_task_epoch = 0;
+static int client_count = 0;
+
+static void wifi_timeout_task(void *params) {
+    int cur_epoch = (int)params;
+    const int tout = gctx.settings_manager->Get("wifi_timeout");
+
+    if (int cnt = tout; cnt) {
+        while (cnt--) {
+            if (client_count) {
+                cnt = tout;
+            }
+            vTaskDelay(1000 / portTICK_PERIOD_MS);
+            ESP_LOGI(TAG, "%d wifi seconds left", cnt);
+            if (cur_epoch != timeout_task_epoch) {
+                vTaskDelete(nullptr);
+            }
+        }
+        wifi_stop();
+    }
+    vTaskDelete(nullptr);
+}
+
+void wifi_start_timeout() {
+    xTaskCreate(wifi_timeout_task, "wifi-timeout-task", 4096, (void *)++timeout_task_epoch,
+                configMAX_PRIORITIES - 8, nullptr);
+}
+
 static void retry_wifi_task(void *param) {
     vTaskDelay(5000 / portTICK_PERIOD_MS);
     esp_wifi_connect();
@@ -29,9 +57,11 @@ static void retry_wifi_task(void *param) {
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                                void *event_data) {
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
+        ++client_count;
         wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
         ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
+        --client_count;
         wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
         ESP_LOGI(TAG, "station " MACSTR " leave, AID=%d", MAC2STR(event->mac), event->aid);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
@@ -78,6 +108,7 @@ static void wifi_init_apsta() {
     }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
     ESP_LOGI(TAG, "wifi_init_apsta finished.");
+    wifi_start_timeout();
 }
 
 void wifi_init() {
@@ -103,6 +134,7 @@ void wifi_init() {
 }
 
 void wifi_start() {
+    wifi_start_timeout();
     if (gctx.sta_enabled) {
         esp_wifi_set_mode(WIFI_MODE_APSTA);
     } else {
@@ -111,6 +143,7 @@ void wifi_start() {
 }
 
 void wifi_stop() {
+    ++timeout_task_epoch;
     if (gctx.sta_enabled) {
         esp_wifi_set_mode(WIFI_MODE_STA);
     } else {
