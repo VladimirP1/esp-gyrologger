@@ -3,7 +3,7 @@ This is a GyroFlow-compatible data logger firmware for the esp32 and esp32-c3 mi
 
 ### Required hardware
 * An esp32 or esp32-c3 with 4MB flash
-* A BMI160 or MPU6050 IMU
+* A BMI270, BMI160 or MPU6050 IMU
 * 4 wires
 
 You can get these as separate modules or on a single board (EspLog)
@@ -36,7 +36,7 @@ The zip file will contain a readme file with a command line for flashing using [
 
 #### EspLog PCB
 
-Four-layer 11 x 14 mm PCB with esp32-c3, 3.3v ldo and either bmi160 or lsm6dsr gyro.
+Four-layer 11 x 14 mm PCB with esp32-c3, 3.3v ldo and either bmi160, bmi270 or lsm6dsr gyro.
 The side with the components can be submerged in epoxy, making the logger almost a perfect 11x14x2.5mm cube, so it is easier to glue to a camera.
 
 [EasyEDA project](https://oshwlab.com/vladimir.pinchuk01/gyro-logger-esp32c3_copy)
