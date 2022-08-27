@@ -14,6 +14,8 @@ extern "C" {
 #include "bus/mini_i2c.h"
 }
 
+#include "bmi270_cfg.h"
+
 #include "filters/gyro_ring.hpp"
 #include "global_context.hpp"
 
@@ -39,18 +41,21 @@ static const char* TAG = "gyro_bmi160";
 
 #define REG_CMD 0x7e
 
-#define TIMER_DIVIDER (16)
-#define TIMER_SCALE (TIMER_BASE_CLK / TIMER_DIVIDER)
+// bmi270 specific
+#define REG_INIT_CTRL 0x59
 
-static void IRAM_ATTR update_alarm(uint64_t dt) {
-    timer_group_set_counter_enable_in_isr(TIMER_GROUP_0, TIMER_0, TIMER_PAUSE);
-    uint64_t alarm = timer_group_get_counter_value_in_isr(TIMER_GROUP_0, TIMER_0) + dt;
-    timer_group_set_alarm_value_in_isr(TIMER_GROUP_0, TIMER_0, alarm);
-    timer_group_clr_intr_status_in_isr(TIMER_GROUP_0, TIMER_0);
-    timer_group_set_counter_enable_in_isr(TIMER_GROUP_0, TIMER_0, TIMER_START);
-}
+#define REG_PWR_CONF 0x7c
+
+#define REG_PWR_CTRL 0x7d
+
+#define REG_FIFO_DATA_BMI270 0x26
+
+#define REG_FIFO_CONFIG_0_BMI270 0x48
+
+#define REG_FIFO_CONFIG_1_BMI270 0x49
 
 static uint64_t prev_gyro_time = 0;
+static bool is_bmi270 = false;
 
 static int bytes_to_read = 1;
 static void IRAM_ATTR gyro_i2c_cb(void* args) {
@@ -91,9 +96,7 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
                     while (1)
                         ;
                 } else if (fh_parm == 2) {  // fifo input config
-                                            // TODO
-                    while (1)
-                        ;
+                    bytes_to_read = 5;
                 }
             }
         } else {
@@ -129,8 +132,8 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
         prev_gyro_time = time;
     }
 
-    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
-                               nullptr);
+    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, is_bmi270 ? REG_FIFO_DATA_BMI270 : REG_FIFO_DATA,
+                               bytes_to_read, gyro_i2c_cb, nullptr);
 }
 
 bool probe_bmi160(uint8_t dev_adr) {
@@ -138,7 +141,15 @@ bool probe_bmi160(uint8_t dev_adr) {
     if (mini_i2c_read_reg_sync(dev_adr, 0x00, data, 1) != ESP_OK) {
         return false;
     }
-    return data[0] == 0xD1;
+    return data[0] == 0xD1 || data[0] == 0x24;
+}
+
+static bool check_is_bmi270() {
+    uint8_t data[1];
+    if (mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, 0x00, data, 1) != ESP_OK) {
+        return false;
+    }
+    return data[0] == 0x24;
 }
 
 void gyro_bmi160_task(void* params) {
@@ -150,30 +161,70 @@ void gyro_bmi160_task(void* params) {
         vTaskDelay(100 / portTICK_PERIOD_MS);
     }
 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb0);  // fifo reset
+    is_bmi270 = check_is_bmi270();
+    if (is_bmi270) {
+        ESP_LOGI(TAG, "BMI270 detected");
+        // disable power save
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_CONF, 0x00);
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        // prepare to load config file
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_INIT_CTRL, 0x00);
+        // load config file
+        for (int i = 0; i < sizeof(bmi270_config_file); i += 2) {
+            mini_i2c_write_reg2_sync(gctx.gyro_i2c_adr, 0x5b, (uint8_t)((i / 2) & 0x0F),
+                                     (uint8_t)((i / 2) >> 4));
+            mini_i2c_write_reg2_sync(gctx.gyro_i2c_adr, 0x5e, bmi270_config_file[i],
+                                     bmi270_config_file[i + 1]);
+        }
+        // complete loading config file
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_INIT_CTRL, 0x01);
+        vTaskDelay(200 / portTICK_PERIOD_MS);
 
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+        mini_i2c_set_timing(710000);
 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0b00010001);  // start accel
-    vTaskDelay(10 / portTICK_PERIOD_MS);
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0b00010101);  // start gyro
-    vTaskDelay(100 / portTICK_PERIOD_MS);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0_BMI270, 0);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1_BMI270, 0b11010000);
 
-    mini_i2c_set_timing(710000);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_CONF,
+                                0b10101000);  // 100hz sample rate, OSR1
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_RANGE, 3);
 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_RANGE, 0b1100);
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_CONF, 0b00101000); // 100hz sample rate, OSR1
-    // mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00001101); // 3.2k sample rate, OSR4 (254hz LPF)
-    // mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00011101); // 3.2k sample rate, OSR2 (524hz LPF)
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF, 0b00101101); // 3.2k sample rate, OSR1 (890hz LPF)
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF,
+                                0b11101101);  // 3.2k sample rate, OSR1 (890hz LPF)
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
 
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_CONF, 0x02);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_CTRL, 0x06);  // enable gyro + acc
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb0);       // fifo reset
 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0, 0);
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);
+        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA_BMI270, bytes_to_read,
+                                   gyro_i2c_cb, nullptr);
+    } else {
+        ESP_LOGI(TAG, "BMI160 detected");
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb0);  // fifo reset
 
-    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
-                               nullptr);
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0b00010001);  // start accel
+        vTaskDelay(10 / portTICK_PERIOD_MS);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0b00010101);  // start gyro
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+
+        mini_i2c_set_timing(710000);
+
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_CONF,
+                                0b00101000);  // 100hz sample rate, OSR1
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACC_RANGE, 0b1100);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF,
+                                0b00101101);  // 3.2k sample rate, OSR1 (890hz LPF)
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
+
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0, 0);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1, 0b11010000);
+
+        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, bytes_to_read, gyro_i2c_cb,
+                                   nullptr);
+    }
 
     vTaskDelete(NULL);
 }

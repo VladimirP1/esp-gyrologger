@@ -1,7 +1,8 @@
+#include "esp_attr.h"
 #include "hal/i2c_hal.h"
 #include "soc/i2c_periph.h"
 
-static inline void mini_i2c_write_txfifo(i2c_hal_context_t* hal, uint8_t* ptr, uint8_t len) {
+static void IRAM_ATTR mini_i2c_write_txfifo(i2c_hal_context_t* hal, uint8_t* ptr, uint8_t len) {
     // TODO: handle i2c 0/1
     uint32_t fifo_addr = 0x6001301c;
     for (int i = 0; i < len; i++) {

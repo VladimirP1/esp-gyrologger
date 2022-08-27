@@ -307,6 +307,48 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, ui
     return ESP_OK;
 }
 
+esp_err_t IRAM_ATTR mini_i2c_write_reg2_sync(uint8_t dev_adr, uint8_t reg_adr, uint8_t byte1, uint8_t byte2) {
+    if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
+        return ESP_ERR_NOT_FINISHED;
+    }
+
+    i2c_hal_rxfifo_rst(&i2c_ctx.hal);
+    i2c_hal_txfifo_rst(&i2c_ctx.hal);
+
+    int idx = 0;
+    uint8_t data[] = {dev_adr << 1, reg_adr, byte1, byte2};
+    mini_i2c_write_txfifo(&i2c_ctx.hal, data, 4);
+    {
+        i2c_hw_cmd_t hw_cmd = {.op_code = I2C_LL_CMD_RESTART};
+        i2c_hal_write_cmd_reg(&i2c_ctx.hal, hw_cmd, idx++);
+    }
+    {
+        i2c_hw_cmd_t hw_cmd = {.op_code = I2C_LL_CMD_WRITE, .byte_num = 4, .ack_en = 1};
+        i2c_hal_write_cmd_reg(&i2c_ctx.hal, hw_cmd, idx++);
+    }
+    {
+        i2c_hw_cmd_t hw_cmd = {.op_code = I2C_LL_CMD_STOP};
+        i2c_hal_write_cmd_reg(&i2c_ctx.hal, hw_cmd, idx++);
+    }
+
+    i2c_ctx.status = I2C_STATUS_ACTIVE;
+    i2c_hal_enable_master_tx_it(&i2c_ctx.hal);
+    i2c_hal_trans_start(&i2c_ctx.hal);
+
+    while (i2c_ctx.status == I2C_STATUS_ACTIVE) {
+        esp_rom_delay_us(10);
+        i2c_isr_handler(NULL);
+    }
+
+    if (i2c_ctx.status != I2C_STATUS_IDLE) {
+        xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
+        return ESP_FAIL;
+    }
+
+    xSemaphoreGiveFromISR(i2c_ctx.mtx, NULL);
+    return ESP_OK;
+}
+
 #undef SOC_I2C_SUPPORT_HW_FSM_RST
 #define SOC_I2C_SUPPORT_HW_FSM_RST 0
 #undef SOC_I2C_SUPPORT_HW_CLR_BUS
