@@ -660,7 +660,7 @@ static httpd_handle_t start_webserver(void) {
 static esp_err_t stop_webserver(httpd_handle_t server) { return httpd_stop(server); }
 
 static void background_scanner_task(void* param) {
-    while (true) {
+    while (!gctx.terminate_for_update) {
         std::vector<std::pair<std::string, int>> new_file_list;
         DIR* dp;
         struct dirent* ep;
@@ -686,6 +686,7 @@ static void background_scanner_task(void* param) {
         xSemaphoreGive(file_list_mtx);
         vTaskDelay(1000 / portTICK_PERIOD_MS);
     }
+    vTaskDelete(nullptr);
 }
 
 void http_init() {
