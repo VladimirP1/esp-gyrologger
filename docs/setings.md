@@ -25,6 +25,8 @@ Different methods either to start logging with camera or to start camera with lo
 3. Runcam protocol. This will setup an UART RX on "Cam control pin" and wait for recording to be started from FC to start/stop logging.
 ### Start logging on boot
 This will automatically start logging on boot.
+### Wifi auto off (seconds)
+This will disable wifi automatically if nobody is connected for this amount of seconds.
 ### IMU Orientation
 IMU orientation which will be embedded into the gcsv files. Make sure you reload the download page after changing this.
 ### WiFi password
