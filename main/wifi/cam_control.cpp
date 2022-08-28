@@ -11,6 +11,7 @@ extern "C" {
 
 #include <hal/gpio_types.h>
 #include <driver/gpio.h>
+#include <driver/uart.h>
 }
 
 #include <string>
@@ -135,6 +136,52 @@ void momentary_ground_task(void* param) {
     }
 }
 
+void runcam_protocol_listen_task(void* param) {
+    gpio_num_t rx_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("trig_gpio_0"));
+
+    if (rx_gpio < 0) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    gpio_reset_pin(rx_gpio);
+
+    uart_config_t uart_config = {
+        .baud_rate = 115200,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
+
+    static constexpr int kBufSize = 256;
+
+    ESP_ERROR_CHECK(uart_driver_install(0, kBufSize * 2, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(0, &uart_config));
+    ESP_ERROR_CHECK(
+        uart_set_pin(0, UART_PIN_NO_CHANGE, rx_gpio, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+    uint8_t buf[4];
+    int pos = 0;
+    while (1) {
+        uart_read_bytes(0, buf + pos, 1, portMAX_DELAY);
+        if (buf[(pos - 3 + 4) % 4] == 0xcc && buf[(pos - 2 + 4) % 4] == 0x01) {
+            if (buf[(pos - 1 + 4) % 4] == 0x01 && buf[pos] == 0xe7) {
+                ESP_LOGI(TAG, "runcam protocol: simulate power btn");
+                gctx.logger_control.active = !gctx.logger_control.active;
+            } else if (buf[(pos - 1 + 4) % 4] == 0x03 && buf[pos] == 0x98) {
+                ESP_LOGI(TAG, "runcam protocol: record start");
+                gctx.logger_control.active = true;
+            } else if (buf[(pos - 1 + 4) % 4] == 0x04 && buf[pos] == 0xcc) {
+                ESP_LOGI(TAG, "runcam protocol: record end");
+                gctx.logger_control.active = false;
+            }
+        }
+        pos = (pos + 1) % 4;
+    }
+}
+
 void cam_control_task(void* param) {
     int type = gctx.settings_manager->Get("cam_ctrl_type");
     switch (type) {
@@ -148,5 +195,8 @@ void cam_control_task(void* param) {
         case 2: {
             firefly_x_lite_task(param);
         } break;
+        case 3: {
+            runcam_protocol_listen_task(param);
+        }
     }
 }
