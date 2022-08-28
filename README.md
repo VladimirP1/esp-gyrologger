@@ -8,6 +8,10 @@ This is a GyroFlow-compatible data logger firmware for the esp32 and esp32-c3 mi
 
 You can get these as separate modules or on a single board (EspLog)
 
+### Parameter docs
+
+[HERE](docs/setings.md)
+
 ### How to flash and get started with the DIY version?
 [YouYube tutorial](https://www.youtube.com/watch?v=SZeJi4hdDFE)
 
