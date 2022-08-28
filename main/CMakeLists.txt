@@ -5,6 +5,7 @@ idf_component_register(
         "gyro/gyro_bmi160.cpp" 
         "gyro/gyro_lsm6.cpp" 
         "gyro/gyro_mpu6050.cpp" 
+        "gyro/gyro_icm42688.cpp" 
         "gyro/gyro_probe.cpp" 
         "logger/logger.cpp" 
         "wifi/http.cpp" 

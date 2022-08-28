@@ -449,8 +449,14 @@ void IRAM_ATTR copy_flash_task(void* vargs) {
 static esp_err_t update_post_handler(httpd_req_t* req) {
     ESP_LOGI(TAG, "Receiving file ...");
 
+    if (gctx.terminate_for_update) {
+        return ESP_FAIL;
+    }
+
     gctx.terminate_for_update = true;
     storage_fat_deinit();
+
+    vTaskDelay(1000 / portTICK_PERIOD_MS);
 
     static constexpr int SCRATCH_BUFSIZE = 256;
     char buf[SCRATCH_BUFSIZE];

@@ -181,6 +181,9 @@ void gyro_bmi160_task(void* params) {
         vTaskDelay(200 / portTICK_PERIOD_MS);
 
         mini_i2c_set_timing(710000);
+        mini_i2c_double_stop_timing();
+        mini_i2c_double_stop_timing();
+        mini_i2c_double_stop_timing();
 
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_0_BMI270, 0);
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CONFIG_1_BMI270, 0b11010000);
@@ -191,7 +194,7 @@ void gyro_bmi160_task(void* params) {
 
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_CONF,
                                 0b11101101);  // 3.2k sample rate, OSR1 (890hz LPF)
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 1);
+        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYR_RANGE, 0b00001001);
 
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_CONF, 0x02);
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_CTRL, 0x06);  // enable gyro + acc
