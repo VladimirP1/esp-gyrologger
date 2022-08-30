@@ -54,8 +54,8 @@ static const char* TAG = "gyro_bmi160";
 
 #define REG_FIFO_CONFIG_1_BMI270 0x49
 
-static uint64_t prev_gyro_time = 0;
 static bool is_bmi270 = false;
+static uint8_t factor_zx{};
 
 static int bytes_to_read = 1;
 static void IRAM_ATTR gyro_i2c_cb(void* args) {
@@ -69,7 +69,8 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
     static uint8_t fh_mode = 0, fh_parm = 0;
     static int16_t gyro[3] = {0, 0, 0};
     static int16_t accel[3] = {0, 0, 0};
-    static bool have_gyro = false, have_accel = false, pipeline_reset = false;
+    static uint64_t prev_gyro_time = 0;
+    static bool have_gyro = false, have_accel = false;
 
     if (mini_i2c_read_reg_get_result(tmp_data, bytes_to_read) == ESP_OK) {
         if (bytes_to_read == 1) {
@@ -105,9 +106,10 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
                 i += 6;
             }
             if (fh_parm & 2) {  // have gyr
-                gyro[0] = (int16_t)((tmp_data[i + 1] << 8) | tmp_data[i + 0]);
-                gyro[1] = (int16_t)((tmp_data[i + 3] << 8) | tmp_data[i + 2]);
                 gyro[2] = (int16_t)((tmp_data[i + 5] << 8) | tmp_data[i + 4]);
+                gyro[1] = (int16_t)((tmp_data[i + 3] << 8) | tmp_data[i + 2]);
+                gyro[0] = (int16_t)((tmp_data[i + 1] << 8) | tmp_data[i + 0]) -
+                          factor_zx * gyro[2] / (1 << 9);
                 i += 6;
                 have_gyro = true;
             }
@@ -128,7 +130,6 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
                              accel[1], accel[2], have_accel ? kFlagHaveAccel : 0);
         have_gyro = false;
         have_accel = false;
-        pipeline_reset = false;
         prev_gyro_time = time;
     }
 
@@ -199,6 +200,8 @@ void gyro_bmi160_task(void* params) {
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_CONF, 0x02);
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_CTRL, 0x06);  // enable gyro + acc
         mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CMD, 0xb0);       // fifo reset
+
+        mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, 0x3c, &factor_zx, 1);
 
         mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA_BMI270, bytes_to_read,
                                    gyro_i2c_cb, nullptr);
