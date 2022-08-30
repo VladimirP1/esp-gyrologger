@@ -173,7 +173,22 @@ void button_task(void* params) {
         }
 
         if (cur_state != prev_state && cur_state) {
-            gctx.logger_control.active = !gctx.logger_control.active;
+            int cnt = 0;
+            while (!gpio_get_level(btn_gpio)) {
+                ++cnt;
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+
+            if (cnt > 4000) { // 40 seconds
+                cur_state = prev_state;
+                gctx.settings_manager->Reset();
+            } else if (cnt > 200) { // 2 seconds
+                cur_state = prev_state;
+                gctx.settings_manager->Set(
+                    "file_epoch", ((int)gctx.settings_manager->Get("file_epoch") + 1) % 676);
+            } else {
+                gctx.logger_control.active = !gctx.logger_control.active;
+            }
 
             vTaskDelay(200 / portTICK_PERIOD_MS);
 

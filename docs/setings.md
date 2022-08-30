@@ -4,7 +4,7 @@ The i2c pins where the IMU is connected. These can be any pins, but make sure th
 The pin where the LED is connected it can be either an ordinary LED or ws2812. In case of an ordinary LED no resistor is neccesary.
 ### Button pin
 The pin where the button is connected. Just a button which shorts the pin to ground when pressed.
-### Set TX power to 2dbm
+### Max wifi tx power (dbm)
 Reduces TX power so that PCB designs with a bad antenna can successfuly transmit at least something.
 ### Disable wifi when started with button
 When logging is started by button, disable wifi to save power / reduce heat until logging is stopped.
@@ -27,7 +27,14 @@ Different methods either to start logging with camera or to start camera with lo
 This will automatically start logging on boot.
 ### Wifi auto off (seconds)
 This will disable wifi automatically if nobody is connected for this amount of seconds.
+### Epoch
+This number is used to generate the log filename (eg 0 results in prefix LAA, 1 in LAB, 2 in LAC).
+You can increment this number by pressing the button for > 2s.
+This can be useful if you changed the memory card 
 ### IMU Orientation
 IMU orientation which will be embedded into the gcsv files. Make sure you reload the download page after changing this.
 ### WiFi password
 Wifi access point password.
+
+## Setings reset
+It is possible to reset settings to defaults if the button pin is configured correctly. For this, press the button pin for > 40s.

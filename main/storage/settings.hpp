@@ -34,7 +34,7 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"led_type", "Led type(0 = normal, 1 = ws2812)", 0, 1, 0},
     {"led_bright", "Ws2812 led brightness (0-100)", 0, 100, 8},
     {"btn_pin", "Button pin", -1.0, 64.0, -1},
-    {"wifi_2dbm", "Set TX power to 2dbm", 0.0, 1.0, 1.0},
+    {"wifi_dbm", "Max wifi tx power (dbm)", 2.0, 20.0, 2.0},
     {"wifi_stop_act", "Disable wifi when started with button", 0.0, 1.0, 1.0},
     {"accel_ofs_x", "Accel offset X (g)", -1.0, 1.0, 0.0},
     {"accel_ofs_y", "Accel offset Y (g)", -1.0, 1.0, 0.0},
@@ -54,6 +54,7 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"trig_gpio_0", "Cam control pin", -1, 64.0, -1},
     {"loop_mode", "Start logging on boot", 0, 1, 0},
     {"wifi_timeout", "Wifi auto off (seconds)", 0, 3600, 0},
+    {"file_epoch", "Epoch", 0, 128, 0},
 };
 
 static const std::initializer_list<StringSetting> kStringSettingDescriptor = {

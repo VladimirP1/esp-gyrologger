@@ -44,8 +44,9 @@ static esp_err_t find_good_filename(char *buf) {
         ESP_LOGE(TAG, "Couldn't open the directory");
         return ESP_FAIL;
     }
-    static constexpr char templ[] = "/spiflash/log%05d.bin";
-    snprintf(buf, 30, templ, max_idx + 1);
+    static constexpr char templ[] = "/spiflash/L%c%c%05d.bin";
+    int epoch = gctx.settings_manager->Get("file_epoch");
+    snprintf(buf, 30, templ, 'A' + epoch/26, 'A' + epoch % 26, max_idx + 1);
     return ESP_OK;
 }
 
@@ -53,23 +54,23 @@ static esp_err_t delete_oldest() {
     DIR *dp;
     struct dirent *ep;
     dp = opendir("/spiflash");
+    std::string file_to_delete{};
     int min_idx = std::numeric_limits<int>::max();
     if (dp != NULL) {
         while ((ep = readdir(dp))) {
-            static constexpr char templ[] = "/spiflash/%s";
             std::string filename = ep->d_name;
             int idx = std::stoi(filename.substr(3, 5));
-            min_idx = std::min(idx, min_idx);
+            if (idx < min_idx) {
+                min_idx = idx;
+                file_to_delete = "/spiflash/" + filename;
+            }
         }
         (void)closedir(dp);
     } else {
         ESP_LOGE(TAG, "Couldn't open the directory");
         return ESP_FAIL;
     }
-    static constexpr char templ[] = "/spiflash/log%05d.bin";
-    char buf[30];
-    snprintf(buf, 30, templ, min_idx);
-    unlink(buf);
+    unlink(file_to_delete.c_str());
     return ESP_OK;
 }
 
@@ -119,7 +120,7 @@ void logger_task(void *params_pvoid) {
                 }
 
                 if (!f) {
-                    ESP_LOGI(TAG, "Opening file");
+                    ESP_LOGI(TAG, "Opening file %s", gctx.logger_control.file_name);
                     f = fopen(gctx.logger_control.file_name, "ab");
 
                     if (!f) {

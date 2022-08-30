@@ -96,8 +96,13 @@ static void wifi_init_apsta() {
     strcpy((char *)wifi_config_sta.sta.ssid, sta_ssid.c_str());
     strcpy((char *)wifi_config_sta.sta.password, sta_password.c_str());
     ESP_ERROR_CHECK(esp_wifi_start());
-    if (gctx.settings_manager->Get("wifi_2dbm") > 0.5) {
-        ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(8));
+    {
+        static constexpr int wifi_dbm[] = {2, 5, 7, 8, 11, 13, 14, 15, 16, 18, 20};
+        static constexpr int wifi_pwr[] = {8, 20, 28, 34, 44, 52, 56, 60, 66, 72, 80};
+        double cfg_dbm = gctx.settings_manager->Get("wifi_dbm");
+        int i = 10;
+        while (i > 0 && wifi_dbm[i] > cfg_dbm) --i;
+        ESP_ERROR_CHECK(esp_wifi_set_max_tx_power(wifi_pwr[i]));
     }
     if (gctx.sta_enabled) {
         ESP_ERROR_CHECK(esp_wifi_set_mode(WIFI_MODE_APSTA));
