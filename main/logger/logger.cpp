@@ -46,7 +46,7 @@ static esp_err_t find_good_filename(char *buf) {
     }
     static constexpr char templ[] = "/spiflash/L%c%c%05d.bin";
     int epoch = gctx.settings_manager->Get("file_epoch");
-    snprintf(buf, 30, templ, 'A' + epoch/26, 'A' + epoch % 26, max_idx + 1);
+    snprintf(buf, 30, templ, 'A' + epoch / 26, 'A' + epoch % 26, max_idx + 1);
     return ESP_OK;
 }
 
@@ -70,6 +70,7 @@ static esp_err_t delete_oldest() {
         ESP_LOGE(TAG, "Couldn't open the directory");
         return ESP_FAIL;
     }
+    ESP_LOGI(TAG, "Deleting %s", file_to_delete.c_str());
     unlink(file_to_delete.c_str());
     return ESP_OK;
 }
@@ -186,11 +187,10 @@ void logger_task(void *params_pvoid) {
                 xSemaphoreGive(gctx.logger_control.mutex);
             }
             esp_vfs_fsync(fileno(f));
-
-            auto [free, total] = get_free_space_kb();
-            if (free < 30 && free > 0) {
-                delete_oldest();
-            }
+        }
+        auto [free, total] = get_free_space_kb();
+        if (free < 90 && free > 0) {
+            delete_oldest();
         }
     }
 }
