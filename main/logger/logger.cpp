@@ -27,6 +27,18 @@ extern "C" {
 
 #define TAG "logger"
 
+bool validate_file_name(std::string &s) {
+    if (s.size() != 12) return false;
+    for (int i = 0; i < 3; ++i)
+        if (char c = toupper(s[i]); c < 'A' || c > 'Z') return false;
+    for (int i = 3; i < 8; ++i)
+        if (char c = s[i]; c < '0' || c > '9') return false;
+    if (char c = s[8]; c != '.') return false;
+    for (int i = 9; i < 12; ++i)
+        if (char c = toupper(s[i]); c < 'A' || c > 'Z') return false;
+    return true;
+}
+
 static esp_err_t find_good_filename(char *buf) {
     DIR *dp;
     struct dirent *ep;
@@ -34,8 +46,11 @@ static esp_err_t find_good_filename(char *buf) {
     int max_idx = 0;
     if (dp != NULL) {
         while ((ep = readdir(dp))) {
-            static constexpr char templ[] = "/spiflash/%s";
             std::string filename = ep->d_name;
+            if (!validate_file_name(filename)) {
+                unlink(("/spiflash/" + filename).c_str());
+                continue;
+            }
             int idx = std::stoi(filename.substr(3, 5));
             max_idx = std::max(idx, max_idx);
         }
@@ -59,6 +74,10 @@ static esp_err_t delete_oldest() {
     if (dp != NULL) {
         while ((ep = readdir(dp))) {
             std::string filename = ep->d_name;
+            if (!validate_file_name(filename)) {
+                unlink(("/spiflash/" + filename).c_str());
+                continue;
+            }
             int idx = std::stoi(filename.substr(3, 5));
             if (idx < min_idx) {
                 min_idx = idx;
