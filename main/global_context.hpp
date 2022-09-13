@@ -65,6 +65,8 @@ typedef struct {
     } logger_control;
 
     bool sta_enabled;
+
+    int battery_voltage_mv;
 } GlobalContext;
 
 extern GlobalContext gctx;

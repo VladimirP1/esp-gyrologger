@@ -17,5 +17,6 @@ idf_component_register(
         "wifi/random_names.cpp" 
         "wifi/cam_control.cpp" 
         "misc/led_strip/led_strip.c"
+        "misc/battery.cpp"
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")

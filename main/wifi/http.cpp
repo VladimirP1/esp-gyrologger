@@ -233,6 +233,11 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
     entry("Last log avg rate (Bytes/min)",
           std::to_string(gctx.logger_control.avg_logging_rate_bytes_min));
 
+#if EXPERIMENTAL_BATTERY
+    entry("Battery voltage (mv)",
+          std::to_string(gctx.battery_voltage_mv));
+#endif
+
     resp.append("</table>");
 
     HANDLE(httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));

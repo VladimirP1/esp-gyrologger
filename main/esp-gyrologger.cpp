@@ -18,6 +18,7 @@ extern "C" {
 }
 
 #include "misc/misc.hpp"
+#include "misc/battery.hpp"
 #include "wifi/http.hpp"
 #include "wifi/wifi.hpp"
 #include "wifi/cam_control.hpp"
@@ -43,6 +44,11 @@ void app_main_cpp(void) {
     nvs_init();
 
     gctx.settings_manager = new SettingsManager();
+
+#if EXPERIMENTAL_BATTERY
+    xTaskCreate(battery_task, "battery_task", 3084, NULL, configMAX_PRIORITIES - 4, NULL);
+#endif
+
 
     wifi_init();
 
