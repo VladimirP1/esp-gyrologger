@@ -983,8 +983,7 @@ var wasm = [
                 "id,esplog",
                 "orientation,)--";
 
-const char js_wasm_decoder_1[] = R"--(",
-                "tscale,0.00180",
+const char js_wasm_decoder_1[] = R"--("tscale,0.00180",
                 "gscale,0.00053263221",
                 "ascale,0.00048828125",
                 "t,gx,gy,gz,ax,ay,az"

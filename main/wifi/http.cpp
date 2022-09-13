@@ -234,8 +234,7 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
           std::to_string(gctx.logger_control.avg_logging_rate_bytes_min));
 
 #if EXPERIMENTAL_BATTERY
-    entry("Battery voltage (mv)",
-          std::to_string(gctx.battery_voltage_mv));
+    entry("Battery voltage (mv)", std::to_string(gctx.battery_voltage_mv));
 #endif
 
     resp.append("</table>");
@@ -285,8 +284,15 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_xhr_status_updater, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_0, HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, gctx.settings_manager->GetString("imu_orientation").c_str(),
-                                 HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(
+        req, (gctx.settings_manager->GetString("imu_orientation") + "\",\n").c_str(),
+        HTTPD_RESP_USE_STRLEN));
+    std::string additional = gctx.settings_manager->GetString("gcsv_extra");
+    if (additional.size()) {
+        std::replace(additional.begin(), additional.end(), '|', '\n');
+        additional += ",\n";
+        HANDLE(httpd_resp_send_chunk(req, additional.c_str(), HTTPD_RESP_USE_STRLEN));
+    }
     HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_1, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
@@ -295,6 +301,22 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 
 static const httpd_uri_t root_get = {
     .uri = "/", .method = HTTP_GET, .handler = root_get_handler, .user_ctx = NULL};
+
+std::string url_encode(const std::string& value) {
+    std::string ret;
+    for (std::string::const_iterator i = value.begin(), n = value.end(); i != n; ++i) {
+        std::string::value_type c = (*i);
+        if (std::isalnum(c) || c == '-' || c == '_' || c == '.' || c == '~') {
+            ret += c;
+            continue;
+        }
+        std::string buf("%00");
+        std::snprintf(buf.data(), 4, "%02X", c);
+        ret += buf;
+    }
+
+    return ret;
+}
 
 static esp_err_t settings_get_handler(httpd_req_t* req) {
     std::string resp;
@@ -333,7 +355,7 @@ static esp_err_t settings_get_handler(httpd_req_t* req) {
         resp += R"--(<input id=")--";
         resp += s.name;
         resp += R"--(" type="text" autocomplete="off" value=")--";
-        resp += gctx.settings_manager->GetString(s.name);
+        resp += url_encode(gctx.settings_manager->GetString(s.name));
         resp += "\">";
         resp += "</td>\n";
         resp += R"--(<td class="apply_btn cell" id=")--";

@@ -66,6 +66,7 @@ static const std::initializer_list<StringSetting> kStringSettingDescriptor = {
     {"wifi_password", "WiFi password", "12345678"},
     {"sta_ssid", "WiFi station ssid", "-"},
     {"sta_pwd", "WiFi station password", "12345678"},
+    {"gcsv_extra", "Extra lines for header ex: \"vendor:potcam\",\"lens_info:wide\"", ""},
 };
 
 class SettingsManager {
