@@ -302,7 +302,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
 static const httpd_uri_t root_get = {
     .uri = "/", .method = HTTP_GET, .handler = root_get_handler, .user_ctx = NULL};
 
-std::string url_encode(const std::string& value) {
+std::string html_escape(const std::string& value) {
     std::string ret;
     for (std::string::const_iterator i = value.begin(), n = value.end(); i != n; ++i) {
         std::string::value_type c = (*i);
@@ -310,8 +310,8 @@ std::string url_encode(const std::string& value) {
             ret += c;
             continue;
         }
-        std::string buf("%00");
-        std::snprintf(buf.data(), 4, "%02X", c);
+        char buf[6];
+        std::snprintf(buf, 6, "&#%d;", c);
         ret += buf;
     }
 
@@ -355,7 +355,7 @@ static esp_err_t settings_get_handler(httpd_req_t* req) {
         resp += R"--(<input id=")--";
         resp += s.name;
         resp += R"--(" type="text" autocomplete="off" value=")--";
-        resp += url_encode(gctx.settings_manager->GetString(s.name));
+        resp += html_escape(gctx.settings_manager->GetString(s.name));
         resp += "\">";
         resp += "</td>\n";
         resp += R"--(<td class="apply_btn cell" id=")--";
