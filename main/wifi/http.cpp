@@ -24,6 +24,7 @@ extern "C" {
 
 #include "compression/lib/compression.hpp"
 #include "storage/settings.hpp"
+#include "display.hpp"
 
 #include <string>
 
@@ -663,11 +664,37 @@ static const httpd_uri_t calibration_post = {.uri = "/calibration",
                                              .handler = calibration_post_handler,
                                              .user_ctx = NULL};
 
+static esp_err_t display_get_handler(httpd_req_t* req) {
+    HANDLE(httpd_resp_send_chunk(req, html_display_0, HTTPD_RESP_USE_STRLEN));
+    std::string s = "<canvas id=\"canvas\" width=\"" + std::to_string(oled_get_width()) +
+                    "\" height=\"" + std::to_string(oled_get_height()) + "\"></canvas>";
+    HANDLE(httpd_resp_send_chunk(req, s.c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, html_display_1, HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
+    return ESP_OK;
+}
+
+static const httpd_uri_t display_get = {
+    .uri = "/display", .method = HTTP_GET, .handler = display_get_handler, .user_ctx = NULL};
+
+static esp_err_t display_data_get_handler(httpd_req_t* req) {
+    int size = oled_get_width() * oled_get_height() / 8 + 1;
+    uint8_t buf[size];
+    oled_capture(buf);
+    HANDLE(httpd_resp_send(req, (const char*)buf, size));
+    return ESP_OK;
+}
+
+static const httpd_uri_t display_data_get = {.uri = "/display_data",
+                                             .method = HTTP_GET,
+                                             .handler = display_data_get_handler,
+                                             .user_ctx = NULL};
+
 static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
     httpd_config_t config = HTTPD_DEFAULT_CONFIG();
     config.lru_purge_enable = true;
-    config.max_uri_handlers = 12;
+    config.max_uri_handlers = 13;
 
     ESP_LOGI(TAG, "Starting server on port: '%d'", config.server_port);
     if (httpd_start(&server, &config) == ESP_OK) {
@@ -683,6 +710,8 @@ static httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &settings_post);
         httpd_register_uri_handler(server, &calibration_post);
         httpd_register_uri_handler(server, &calibration_get);
+        httpd_register_uri_handler(server, &display_get);
+        httpd_register_uri_handler(server, &display_data_get);
         return server;
     }
 

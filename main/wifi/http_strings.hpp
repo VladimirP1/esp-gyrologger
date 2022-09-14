@@ -1227,4 +1227,78 @@ const char html_calibration[] = R"--(
 </html>
 )--";
 
+const char html_display_0[] = R"--(<!doctype html>
+<html lang=en>
+
+<head>
+    <meta charset=utf-8>
+    <title>EspLog</title>
+</head>
+
+<body>)--";
+const char html_display_1[] = R"--(
+</body>
+<style>
+    #canvas {
+        width: 6.4rem;
+        height: 3.2rem;
+        image-rendering: pixelated;
+    }
+</style>
+<script type="text/javascript">
+    function setRGB(data, x, y, r, g, b) {
+        data.data[((y * (data.width * 4)) + (x * 4)) + 0] = r;
+        data.data[((y * (data.width * 4)) + (x * 4)) + 1] = g;
+        data.data[((y * (data.width * 4)) + (x * 4)) + 2] = b;
+        data.data[((y * (data.width * 4)) + (x * 4)) + 3] = 255;
+    }
+    
+    function renderBuffer(buffer) {
+        let view = new Uint8Array(buffer);
+        const canvas = document.getElementById('canvas');
+        if (canvas.getContext) {
+            const ctx = canvas.getContext('2d');
+            ctx.fillStyle = "black";
+            ctx.fillRect(0, 0, 64, 32);
+            var data = ctx.createImageData(64, 32);
+            for (let x = 0; x < ctx.canvas.width; ++x) {
+                for (let y = 0; y < ctx.canvas.height; ++y) {
+                    let idx = x + ctx.canvas.width * y;
+                    let val = 0;
+                    if (view[(idx / 8) | 0] & (1 << (idx % 8))) {
+                        val = 255;
+                    }
+                    setRGB(data, x, y, val, val, val);
+                }
+            }
+            ctx.putImageData(data, 0, 0);
+        } else {
+
+        }
+    }
+
+    var update = function(interval, timeout) {
+        let controller = new AbortController();
+        let restarted = false;
+        function restart(t) {
+            if (!restarted) {
+                restarted = true;
+                setTimeout(()=>{update(interval, timeout);}, t);
+            }
+        }
+        let to = setTimeout(()=>{ controller.abort(); }, timeout);
+        fetch('./display_data', {signal: controller.signal}).then((resp)=>{
+            resp.arrayBuffer().then((buf)=>{ 
+                clearTimeout(to); 
+                renderBuffer(buf);
+                restart(interval); 
+            }, (error) => { clearTimeout(to); restart(1000); });
+        }, (error) => { clearTimeout(to); restart(1000); });
+    };
+    update(500, 2000);
+    // fetch('./display_data')
+    //     .then(response => response.arrayBuffer()).then(buf => renderBuffer(buf));
+</script>
+</html>)--";
+
 }  // namespace

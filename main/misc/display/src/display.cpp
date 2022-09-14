@@ -77,7 +77,9 @@ static uint8_t u8x8_byte_esplog(u8x8_t *u8x8, uint8_t msg, uint8_t arg_int, void
     return 1;
 }
 
+static bool display_on{};
 static u8g2_t u8g2;
+static SemaphoreHandle_t display_mtx;
 
 void work_64x32() {
     u8g2_ClearBuffer(&u8g2);
@@ -86,6 +88,7 @@ void work_64x32() {
     vTaskDelay(4000 / portTICK_PERIOD_MS);
 
     while (1) {
+        xSemaphoreTake(display_mtx, portMAX_DELAY);
         u8g2_ClearBuffer(&u8g2);
         u8g2_SetFont(&u8g2, u8g2_font_micro_tr);
         u8g2_SetFontRefHeightText(&u8g2);
@@ -127,16 +130,53 @@ void work_64x32() {
                      ? 1e6 / gctx.logger_control.avg_sample_interval_ns
                      : .0,
                  total_time_s / 60, total_time_s % 60,
-                 spinner[((uint64_t)(gctx.logger_control.last_block_time_us / 800e3)) % 4], spinner[byte_spinner_pos]);
+                 spinner[((uint64_t)(gctx.logger_control.last_block_time_us / 800e3)) % 4],
+                 spinner[byte_spinner_pos]);
         u8g2_DrawStr(&u8g2, 0, 6, buf);
 
         snprintf(buf, 32, "%.1f/%.1fM free", df_info.first / 1e3, df_info.second / 1e3);
         u8g2_DrawStr(&u8g2, 0, 12, buf);
 
         u8g2_SendBuffer(&u8g2);
+        xSemaphoreGive(display_mtx);
         vTaskDelay(250 / portTICK_PERIOD_MS);
     }
 }
+
+void oled_capture(uint8_t *out) {
+    if (!display_on) return;
+    xSemaphoreTake(display_mtx, portMAX_DELAY);
+    uint8_t *buf = u8g2_GetBufferPtr(&u8g2);
+    uint8_t buf_w = u8g2_GetBufferTileWidth(&u8g2);
+    uint8_t buf_h = u8g2_GetBufferTileHeight(&u8g2);
+
+    int width_px = u8g2_GetDisplayWidth(&u8g2);
+    int height_px = u8g2_GetDisplayHeight(&u8g2);
+
+    for (int x = 0; x < width_px; ++x) {
+        for (int y = 0; y < height_px; ++y) {
+            int idx = x + width_px * y;
+            if (u8x8_capture_get_pixel_1(x, y, buf, buf_w)) {
+                out[(idx / 8) | 0] |= 1 << (idx % 8);
+            } else {
+                out[(idx / 8) | 0] &= ~(1 << (idx % 8));
+            }
+        }
+    }
+    xSemaphoreGive(display_mtx);
+}
+
+int oled_get_width() {
+    if (!display_on) return 64;
+    return u8g2_GetDisplayWidth(&u8g2);
+}
+
+int oled_get_height() {
+    if (!display_on) return 32;
+    return u8g2_GetDisplayHeight(&u8g2);
+}
+
+void display_setup() { display_mtx = xSemaphoreCreateMutex(); }
 
 void display_task(void *params) {
     int display_type = gctx.settings_manager->Get("display_type");
@@ -150,6 +190,7 @@ void display_task(void *params) {
             u8g2_SetI2CAddress(&u8g2, 0x78);
             u8g2_InitDisplay(&u8g2);
             u8g2_SetPowerSave(&u8g2, 0);
+            display_on = true;
             work_64x32();
             break;
     }

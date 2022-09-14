@@ -64,6 +64,7 @@ void app_main_cpp(void) {
 #endif
 
     wifi_init();
+    display_setup();
 
     ESP_ERROR_CHECK(storage_fat_init());
 
