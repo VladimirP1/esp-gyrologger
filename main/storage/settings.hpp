@@ -55,6 +55,7 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"loop_mode", "Start logging on boot", 0, 1, 0},
     {"wifi_timeout", "Wifi auto off (seconds)", 0, 3600, 0},
     {"file_epoch", "Epoch", 0, 128, 0},
+    {"display_type", "Display type", 0, 10, 0},
     #if EXPERIMENTAL_BATTERY
     {"dcdc_en", "DC-DC enable pin", -1.0, 64.0, -1.0},
     {"volt_thresh", "Batt volt min (mv)", 0.0, 6000.0, 3000.0},
@@ -66,7 +67,7 @@ static const std::initializer_list<StringSetting> kStringSettingDescriptor = {
     {"wifi_password", "WiFi password", "12345678"},
     {"sta_ssid", "WiFi station ssid", "-"},
     {"sta_pwd", "WiFi station password", "12345678"},
-    {"gcsv_extra", "Extra lines for header ex: \"vendor:potcam\",\"lens_info:wide\"", ""},
+    {"gcsv_extra", "Extra lines for header ex: \"vendor,potcam\",\"lens_info,wide\"", ""},
 };
 
 class SettingsManager {

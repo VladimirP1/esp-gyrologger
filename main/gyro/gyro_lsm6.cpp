@@ -15,6 +15,7 @@ extern "C" {
 
 #include "filters/gyro_ring.hpp"
 #include "global_context.hpp"
+#include "bus/aux_i2c.hpp"
 
 static const char* TAG = "gyro_lsm6";
 
@@ -136,6 +137,7 @@ static void IRAM_ATTR gyro_i2c_cb(void* arg) {
         mini_i2c_hw_fsm_reset();
     }
     if (bytes_to_read == 2) {
+        proc_aux_i2c();
         ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2,
                                                    gyro_i2c_cb, nullptr));
     } else {

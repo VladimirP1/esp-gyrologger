@@ -18,6 +18,7 @@ extern "C" {
 
 #include "filters/gyro_ring.hpp"
 #include "global_context.hpp"
+#include "bus/aux_i2c.hpp"
 
 static const char* TAG = "gyro_bmi160";
 
@@ -133,6 +134,7 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
         prev_gyro_time = time;
     }
 
+    proc_aux_i2c();
     mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, is_bmi270 ? REG_FIFO_DATA_BMI270 : REG_FIFO_DATA,
                                bytes_to_read, gyro_i2c_cb, nullptr);
 }

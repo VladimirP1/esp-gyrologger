@@ -16,6 +16,7 @@ extern "C" {
 
 #include "global_context.hpp"
 #include "filters/gyro_ring.hpp"
+#include "bus/aux_i2c.hpp"
 
 static const char *TAG = "gyro_mpu";
 
@@ -90,7 +91,8 @@ static void IRAM_ATTR gyro_i2c_cb(void *arg) {
     } else {
         mini_i2c_hw_fsm_reset();
     }
-
+    
+    proc_aux_i2c();
     mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
                                nullptr);
 }
@@ -133,7 +135,7 @@ bool probe_mpu6050(uint8_t dev_adr) {
 void gyro_mpu6050_task(void *params_pvoid) {
     gctx.gyro_sr = 2000.0;
     gctx.accel_sr = 2000.0;
-    
+
     /* This is needed for 2k sample rate */
     mini_i2c_set_timing(500000);
 

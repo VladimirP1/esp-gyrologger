@@ -67,6 +67,11 @@ typedef struct {
     bool sta_enabled;
 
     int battery_voltage_mv;
+
+    QueueHandle_t aux_i2c_queue;
+    
+    int wifi_stations;
+    bool wifi_active;
 } GlobalContext;
 
 extern GlobalContext gctx;

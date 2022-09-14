@@ -21,7 +21,6 @@ extern "C" {
 static const char *TAG = "wifi";
 
 static int timeout_task_epoch = 0;
-static int client_count = 0;
 
 static void wifi_timeout_task(void *params) {
     int cur_epoch = (int)params;
@@ -29,7 +28,7 @@ static void wifi_timeout_task(void *params) {
 
     if (int cnt = tout; cnt) {
         while (cnt--) {
-            if (client_count) {
+            if (gctx.wifi_stations) {
                 cnt = tout;
             }
             vTaskDelay(1000 / portTICK_PERIOD_MS);
@@ -57,11 +56,11 @@ static void retry_wifi_task(void *param) {
 static void wifi_event_handler(void *arg, esp_event_base_t event_base, int32_t event_id,
                                void *event_data) {
     if (event_id == WIFI_EVENT_AP_STACONNECTED) {
-        ++client_count;
+        ++gctx.wifi_stations;
         wifi_event_ap_staconnected_t *event = (wifi_event_ap_staconnected_t *)event_data;
         ESP_LOGI(TAG, "station " MACSTR " join, AID=%d", MAC2STR(event->mac), event->aid);
     } else if (event_id == WIFI_EVENT_AP_STADISCONNECTED) {
-        --client_count;
+        --gctx.wifi_stations;
         wifi_event_ap_stadisconnected_t *event = (wifi_event_ap_stadisconnected_t *)event_data;
         ESP_LOGI(TAG, "station " MACSTR " leave, AID=%d", MAC2STR(event->mac), event->aid);
     } else if (event_base == IP_EVENT && event_id == IP_EVENT_STA_GOT_IP) {
@@ -113,6 +112,7 @@ static void wifi_init_apsta() {
     }
     ESP_ERROR_CHECK(esp_wifi_set_config(WIFI_IF_AP, &wifi_config_ap));
     ESP_LOGI(TAG, "wifi_init_apsta finished.");
+    gctx.wifi_active = true;
     wifi_start_timeout();
 }
 
@@ -145,6 +145,7 @@ void wifi_start() {
     } else {
         wifi_init_apsta();
     }
+    gctx.wifi_active = true;
 }
 
 void wifi_stop() {
@@ -154,4 +155,5 @@ void wifi_stop() {
     } else {
         esp_wifi_stop();
     }
+    gctx.wifi_active = false;
 }

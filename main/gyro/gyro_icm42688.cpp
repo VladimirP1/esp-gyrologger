@@ -6,7 +6,7 @@ extern "C" {
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
 
-#include <esp_log.h>1
+#include <esp_log.h>
 #include <esp_check.h>
 #include <esp_attr.h>
 #include <esp_timer.h>
@@ -16,6 +16,7 @@ extern "C" {
 
 #include "global_context.hpp"
 #include "filters/gyro_ring.hpp"
+#include "bus/aux_i2c.hpp"
 
 static const char *TAG = "gyro_icm";
 
@@ -91,6 +92,7 @@ static void IRAM_ATTR gyro_i2c_fifo_hdr_cb(void *arg) {
         mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA, FIFO_SAMPLE_SIZE, gyro_i2c_cb,
                                    NULL);
     } else {
+        proc_aux_i2c();
         mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNTH, 2, gyro_i2c_fifo_hdr_cb,
                                    nullptr);
     }

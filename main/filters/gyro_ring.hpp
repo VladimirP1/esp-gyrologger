@@ -428,6 +428,10 @@ class GyroRing {
         return {.quats = nullptr};
     }
 
+    uint32_t GetInterval() {
+        return desired_interval_;
+    }
+
    private:
     void MaybeNormalize(quat::quat &q) {
         static uint8_t x = 0;
