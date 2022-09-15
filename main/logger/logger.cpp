@@ -51,7 +51,8 @@ static esp_err_t find_good_filename(char *buf) {
                 unlink(("/spiflash/" + filename).c_str());
                 continue;
             }
-            int idx = std::stoi(filename.substr(3, 5));
+            int idx = ((filename[1] - 'A') * 26 + (filename[2] - 'A')) * 100000 +
+                      std::stoi(filename.substr(3, 5));
             max_idx = std::max(idx, max_idx);
         }
         (void)closedir(dp);
@@ -61,7 +62,16 @@ static esp_err_t find_good_filename(char *buf) {
     }
     static constexpr char templ[] = "/spiflash/L%c%c%05d.bin";
     int epoch = gctx.settings_manager->Get("file_epoch");
-    snprintf(buf, 30, templ, 'A' + epoch / 26, 'A' + epoch % 26, max_idx + 1);
+    if (epoch < max_idx / 100000) {
+        epoch = max_idx / 100000;
+    }
+
+    if (epoch != max_idx / 100000) {
+        ESP_LOGW(TAG, "%d != %d", epoch, max_idx / 100000);
+        snprintf(buf, 30, templ, 'A' + epoch / 26, 'A' + epoch % 26, 1);
+    } else {
+        snprintf(buf, 30, templ, 'A' + epoch / 26, 'A' + epoch % 26, (max_idx % 100000) + 1);
+    }
     return ESP_OK;
 }
 
@@ -78,7 +88,8 @@ static esp_err_t delete_oldest() {
                 unlink(("/spiflash/" + filename).c_str());
                 continue;
             }
-            int idx = std::stoi(filename.substr(3, 5));
+            int idx = ((filename[1] - 'A') * 26 + (filename[2] - 'A')) * 100000 +
+                      std::stoi(filename.substr(3, 5));
             if (idx < min_idx) {
                 min_idx = idx;
                 file_to_delete = "/spiflash/" + filename;
