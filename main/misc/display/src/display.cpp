@@ -87,6 +87,16 @@ void work_64x32() {
     u8g2_SendBuffer(&u8g2);
     vTaskDelay(4000 / portTICK_PERIOD_MS);
 
+    auto check_log_start = []() {
+        static bool prev_busy{};
+        if (prev_busy != gctx.logger_control.busy) {
+            u8g2_SendF(&u8g2, "c", 0xa7);
+            vTaskDelay(200 / portTICK_PERIOD_MS);
+            u8g2_SendF(&u8g2, "c", 0xa6);
+            prev_busy = gctx.logger_control.busy;
+        }
+    };
+
     auto redraw = []() {
         xSemaphoreTake(display_mtx, portMAX_DELAY);
         u8g2_ClearBuffer(&u8g2);
@@ -114,7 +124,7 @@ void work_64x32() {
         auto df_info = get_free_space_kb();
         char buf[32];
         snprintf(buf, 32, "%02d:%02d %.1fM%c", total_time_s / 60, total_time_s % 60,
-                 df_info.first / 1e3, gctx.wifi_active? '!':' ');
+                 df_info.first / 1e3, gctx.wifi_active ? '!' : ' ');
 
         u8g2_SetFont(&u8g2, u8g2_font_mozart_nbp_tr);
         u8g2_SetFontRefHeightText(&u8g2);
@@ -174,6 +184,7 @@ void work_64x32() {
     auto last_full_redraw = esp_timer_get_time();
 
     while (1) {
+        check_log_start();
         redraw();
         redraw_gyro();
         u8g2_SendBuffer(&u8g2);
@@ -182,7 +193,9 @@ void work_64x32() {
         for (int i = 0; i < 10; ++i) {
             while (esp_timer_get_time() - last_redraw < 100000) {
                 vTaskDelay(10 / portTICK_PERIOD_MS);
+                check_log_start();
             }
+            check_log_start();
             redraw_gyro();
             u8g2_UpdateDisplayArea(&u8g2, 0, 3, 8, 1);
             last_redraw = esp_timer_get_time();
