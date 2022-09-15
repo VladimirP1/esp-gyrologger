@@ -94,48 +94,32 @@ void work_64x32() {
         u8g2_SetFontRefHeightText(&u8g2);
         u8g2_SetFontPosTop(&u8g2);
 
-        if (gctx.wifi_active) {
-            u8g2_DrawXBM(&u8g2, 54, 0, 7, 5, icon_wifi_7_5);
-        } else {
-            u8g2_DrawXBM(&u8g2, 54, 0, 7, 5, icon_nowifi_7_5);
-        }
-        u8g2_DrawStr(&u8g2, 61, 0, std::to_string(gctx.wifi_stations).c_str());
-
-        int total_time_s{};
+        static int total_time_s{};
+        static std::string fname{"-IDLE--"};
         if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
-            std::string fname;
             if (gctx.logger_control.busy && gctx.logger_control.file_name) {
                 total_time_s = (uint64_t)gctx.logger_control.total_samples_written *
                                (uint64_t)gctx.gyro_ring->GetInterval() / 1000000ULL;
                 fname = std::string(gctx.logger_control.file_name).substr(10);
-            } else {
-                total_time_s = 0;
-                fname = "-- IDLE --";
+                fname = fname.substr(1, 7);
             }
             xSemaphoreGive(gctx.logger_control.mutex);
-            u8g2_DrawStr(&u8g2, 0, 0, fname.c_str());
         }
+
+        u8g2_SetFont(&u8g2, u8g2_font_9x15_tf);
+        u8g2_SetFontRefHeightText(&u8g2);
+        u8g2_SetFontPosTop(&u8g2);
+        u8g2_DrawStr(&u8g2, 0, 0, fname.c_str());
 
         auto df_info = get_free_space_kb();
         char buf[32];
-        static int byte_spinner_pos{};
-        static int last_total_bytes_written{};
-        char spinner[] = {'\\', '|', '/', '-'};
-        if (gctx.logger_control.total_bytes_written != last_total_bytes_written) {
-            last_total_bytes_written = gctx.logger_control.total_bytes_written;
-            byte_spinner_pos = (byte_spinner_pos + 1) % 4;
-        }
-        snprintf(buf, 32, "SR %.1fk %02d:%02d %c%c",
-                 gctx.logger_control.avg_sample_interval_ns != 0
-                     ? 1e6 / gctx.logger_control.avg_sample_interval_ns
-                     : .0,
-                 total_time_s / 60, total_time_s % 60,
-                 spinner[((uint64_t)(gctx.logger_control.last_block_time_us / 800e3)) % 4],
-                 spinner[byte_spinner_pos]);
-        u8g2_DrawStr(&u8g2, 0, 6, buf);
+        snprintf(buf, 32, "%02d:%02d %.1fM%c", total_time_s / 60, total_time_s % 60,
+                 df_info.first / 1e3, gctx.wifi_active? '!':' ');
 
-        snprintf(buf, 32, "%.1f/%.1fM free", df_info.first / 1e3, df_info.second / 1e3);
-        u8g2_DrawStr(&u8g2, 0, 12, buf);
+        u8g2_SetFont(&u8g2, u8g2_font_mozart_nbp_tr);
+        u8g2_SetFontRefHeightText(&u8g2);
+        u8g2_SetFontPosTop(&u8g2);
+        u8g2_DrawStr(&u8g2, 0, 13, buf);
         xSemaphoreGive(display_mtx);
     };
 
@@ -152,26 +136,34 @@ void work_64x32() {
 
         xSemaphoreTake(display_mtx, portMAX_DELAY);
         u8g2_SetDrawColor(&u8g2, 0);
-        u8g2_DrawHLine(&u8g2, 0, 24, 64);
+        u8g2_DrawBox(&u8g2, 0, 24, 64, 8);
         u8g2_SetDrawColor(&u8g2, 1);
 
-        u8g2_DrawLine(&u8g2, 10, 24, std::min(std::max(10 + gx, 0), 20), 24);
-        u8g2_DrawLine(&u8g2, 10, 24, 10, 28);
+        if (gctx.logger_control.busy) {
+            static int pos = 0;
+            for (int i = 0; i <= 64; i += 16) {
+                u8g2_DrawBox(&u8g2, (pos + i) % (64 + 16) - 8, 24, 8, 3);
+            }
+            pos += 4;
+        }
 
-        u8g2_DrawLine(&u8g2, 30, 24, std::min(std::max(30 + gy, 20), 40), 24);
-        u8g2_DrawLine(&u8g2, 30, 24, 30, 28);
+        u8g2_DrawLine(&u8g2, 10, 28, std::min(std::max(10 + gx, 0), 20), 28);
+        u8g2_DrawLine(&u8g2, 10, 28, 10, 31);
 
-        u8g2_DrawLine(&u8g2, 50, 24, std::min(std::max(50 + gz, 40), 60), 24);
-        u8g2_DrawLine(&u8g2, 50, 24, 50, 28);
+        u8g2_DrawLine(&u8g2, 30, 28, std::min(std::max(30 + gy, 20), 40), 28);
+        u8g2_DrawLine(&u8g2, 30, 28, 30, 31);
 
-        u8g2_DrawLine(&u8g2, 10, 27, std::min(std::max(10 + ax, 0), 20), 27);
-        u8g2_DrawLine(&u8g2, 10, 27, 10, 28);
+        u8g2_DrawLine(&u8g2, 50, 28, std::min(std::max(50 + gz, 40), 60), 28);
+        u8g2_DrawLine(&u8g2, 50, 28, 50, 31);
 
-        u8g2_DrawLine(&u8g2, 30, 27, std::min(std::max(30 + ay, 20), 40), 27);
-        u8g2_DrawLine(&u8g2, 30, 27, 30, 28);
+        u8g2_DrawLine(&u8g2, 10, 30, std::min(std::max(10 + ax, 0), 20), 30);
+        u8g2_DrawLine(&u8g2, 10, 30, 10, 31);
 
-        u8g2_DrawLine(&u8g2, 50, 27, std::min(std::max(50 + az, 40), 60), 27);
-        u8g2_DrawLine(&u8g2, 50, 27, 50, 28);
+        u8g2_DrawLine(&u8g2, 30, 30, std::min(std::max(30 + ay, 20), 40), 30);
+        u8g2_DrawLine(&u8g2, 30, 30, 30, 31);
+
+        u8g2_DrawLine(&u8g2, 50, 30, std::min(std::max(50 + az, 40), 60), 30);
+        u8g2_DrawLine(&u8g2, 50, 30, 50, 31);
         xSemaphoreGive(display_mtx);
     };
 
@@ -244,6 +236,15 @@ void display_task(void *params) {
             break;
         case 1:
             u8g2_Setup_ssd1306_i2c_64x32_1f_f(&u8g2, U8G2_R0, u8x8_byte_esplog,
+                                              u8x8_gpio_and_delay_esplog);
+            u8g2_SetI2CAddress(&u8g2, 0x78);
+            u8g2_InitDisplay(&u8g2);
+            u8g2_SetPowerSave(&u8g2, 0);
+            display_on = true;
+            work_64x32();
+            break;
+        case 2:  // ESP32-C3-0.42LCD
+            u8g2_Setup_ssd1306_i2c_72x40_er_f(&u8g2, U8G2_R0, u8x8_byte_esplog,
                                               u8x8_gpio_and_delay_esplog);
             u8g2_SetI2CAddress(&u8g2, 0x78);
             u8g2_InitDisplay(&u8g2);
