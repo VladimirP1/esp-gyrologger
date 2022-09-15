@@ -159,6 +159,11 @@ class Calibrator {
                                                    (1 - lpf_k) * gctx.logger_control.accel_raw[1];
                 gctx.logger_control.accel_raw[2] = lpf_k * static_cast<double>(accel.z) * 16.0 +
                                                    (1 - lpf_k) * gctx.logger_control.accel_raw[2];
+
+                static constexpr double gyr_lpf_k = 0.2;
+                gctx.logger_control.gyro_raw[0] = gyr_lpf_k * static_cast<double>(rs.gx) * kGyroToRads + (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[0];
+                gctx.logger_control.gyro_raw[1] = gyr_lpf_k * static_cast<double>(rs.gy) * kGyroToRads + (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[1];
+                gctx.logger_control.gyro_raw[2] = gyr_lpf_k * static_cast<double>(rs.gz) * kGyroToRads + (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[2];
                 xSemaphoreGive(gctx.logger_control.accel_raw_mtx);
             }
         }

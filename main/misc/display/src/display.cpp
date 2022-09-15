@@ -87,7 +87,7 @@ void work_64x32() {
     u8g2_SendBuffer(&u8g2);
     vTaskDelay(4000 / portTICK_PERIOD_MS);
 
-    while (1) {
+    auto redraw = []() {
         xSemaphoreTake(display_mtx, portMAX_DELAY);
         u8g2_ClearBuffer(&u8g2);
         u8g2_SetFont(&u8g2, u8g2_font_micro_tr);
@@ -136,10 +136,68 @@ void work_64x32() {
 
         snprintf(buf, 32, "%.1f/%.1fM free", df_info.first / 1e3, df_info.second / 1e3);
         u8g2_DrawStr(&u8g2, 0, 12, buf);
-
-        u8g2_SendBuffer(&u8g2);
         xSemaphoreGive(display_mtx);
-        vTaskDelay(250 / portTICK_PERIOD_MS);
+    };
+
+    auto redraw_gyro = []() {
+        xSemaphoreTake(gctx.logger_control.accel_raw_mtx, portMAX_DELAY);
+        int gx = gctx.logger_control.gyro_raw[0] * 10;
+        int gy = gctx.logger_control.gyro_raw[1] * 10;
+        int gz = gctx.logger_control.gyro_raw[2] * 10;
+
+        int ax = gctx.logger_control.accel_raw[0] * 8;
+        int ay = gctx.logger_control.accel_raw[1] * 8;
+        int az = gctx.logger_control.accel_raw[2] * 8;
+        xSemaphoreGive(gctx.logger_control.accel_raw_mtx);
+
+        xSemaphoreTake(display_mtx, portMAX_DELAY);
+        u8g2_SetDrawColor(&u8g2, 0);
+        u8g2_DrawHLine(&u8g2, 0, 24, 64);
+        u8g2_SetDrawColor(&u8g2, 1);
+
+        u8g2_DrawLine(&u8g2, 10, 24, std::min(std::max(10 + gx, 0), 20), 24);
+        u8g2_DrawLine(&u8g2, 10, 24, 10, 28);
+
+        u8g2_DrawLine(&u8g2, 30, 24, std::min(std::max(30 + gy, 20), 40), 24);
+        u8g2_DrawLine(&u8g2, 30, 24, 30, 28);
+
+        u8g2_DrawLine(&u8g2, 50, 24, std::min(std::max(50 + gz, 40), 60), 24);
+        u8g2_DrawLine(&u8g2, 50, 24, 50, 28);
+
+        u8g2_DrawLine(&u8g2, 10, 27, std::min(std::max(10 + ax, 0), 20), 27);
+        u8g2_DrawLine(&u8g2, 10, 27, 10, 28);
+
+        u8g2_DrawLine(&u8g2, 30, 27, std::min(std::max(30 + ay, 20), 40), 27);
+        u8g2_DrawLine(&u8g2, 30, 27, 30, 28);
+
+        u8g2_DrawLine(&u8g2, 50, 27, std::min(std::max(50 + az, 40), 60), 27);
+        u8g2_DrawLine(&u8g2, 50, 27, 50, 28);
+        xSemaphoreGive(display_mtx);
+    };
+
+    uint8_t width_tiles = u8g2_GetBufferTileWidth(&u8g2);
+    uint8_t height_tiles = u8g2_GetBufferTileHeight(&u8g2);
+
+    auto last_redraw = esp_timer_get_time();
+    auto last_full_redraw = esp_timer_get_time();
+
+    while (1) {
+        redraw();
+        redraw_gyro();
+        u8g2_SendBuffer(&u8g2);
+        last_full_redraw = esp_timer_get_time();
+
+        for (int i = 0; i < 10; ++i) {
+            while (esp_timer_get_time() - last_redraw < 100000) {
+                vTaskDelay(10 / portTICK_PERIOD_MS);
+            }
+            redraw_gyro();
+            u8g2_UpdateDisplayArea(&u8g2, 0, 3, 8, 1);
+            last_redraw = esp_timer_get_time();
+            if (last_redraw - last_full_redraw > 900000) {
+                break;
+            }
+        }
     }
 }
 

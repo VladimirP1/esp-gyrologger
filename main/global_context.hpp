@@ -62,6 +62,7 @@ typedef struct {
 
         SemaphoreHandle_t accel_raw_mtx;
         double accel_raw[3];
+        double gyro_raw[3];
     } logger_control;
 
     bool sta_enabled;
