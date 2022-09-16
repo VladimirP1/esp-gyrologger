@@ -129,7 +129,7 @@ bool probe_mpu6050(uint8_t dev_adr) {
     if (mini_i2c_read_reg_sync(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
         return false;
     }
-    return data[0] == 0x68;
+    return data[0] == 0x68 || data[0] == 0x19;
 }
 
 void gyro_mpu6050_task(void *params_pvoid) {
