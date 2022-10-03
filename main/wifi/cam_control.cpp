@@ -99,7 +99,7 @@ void firefly_x_lite_task(void* param) {
                 break;
             } else {
                 rx_buffer[len] = 0;
-                ESP_LOGI(TAG, "Received %d bytes");
+                ESP_LOGI(TAG, "Received %d bytes", len);
                 ESP_LOGI(TAG, "%s", rx_buffer.c_str());
                 if (rx_buffer.find("CAMERA_RECORD_START") != std::string::npos) {
                     gctx.logger_control.active = true;
