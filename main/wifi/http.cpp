@@ -11,6 +11,8 @@ extern "C" {
 #include <esp_partition.h>
 #include <ff.h>
 
+#include <esp_timer.h>
+
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
@@ -311,8 +313,8 @@ std::string html_escape(const std::string& value) {
             ret += c;
             continue;
         }
-        char buf[6];
-        std::snprintf(buf, 6, "&#%d;", c);
+        char buf[15];
+        std::snprintf(buf, 15, "&#%d;", c);
         ret += buf;
     }
 
@@ -444,7 +446,7 @@ void IRAM_ATTR copy_flash_task(void* vargs) {
 
     uint32_t sector_size = app_partition->flash_chip->chip_drv->sector_size;
 
-    ESP_LOGI(TAG, "sector size = %u", sector_size);
+    ESP_LOGI(TAG, "sector size = %u", (unsigned int)sector_size);
     ESP_LOGI(TAG, "storage partition: %p", storage_partition);
     ESP_LOGI(TAG, "app partition: %p", app_partition);
 
@@ -730,7 +732,7 @@ static void background_scanner_task(void* param) {
         if (dp != NULL) {
             while ((ep = readdir(dp))) {
                 static constexpr char templ[] = "/spiflash/%s";
-                char buf[30];
+                char buf[300];
                 snprintf(buf, sizeof(buf), templ, ep->d_name);
                 struct stat st;
                 if (stat(buf, &st) == 0) {

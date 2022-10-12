@@ -9,6 +9,7 @@ extern "C" {
 #include <esp_log.h>
 #include <esp_check.h>
 #include <esp_attr.h>
+#include <esp_timer.h>
 
 #include "bus/mini_i2c.h"
 }

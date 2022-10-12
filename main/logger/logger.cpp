@@ -12,6 +12,7 @@ extern "C" {
 
 #include <esp_log.h>
 #include <esp_console.h>
+#include <esp_timer.h>
 #include <argtable3/argtable3.h>
 }
 

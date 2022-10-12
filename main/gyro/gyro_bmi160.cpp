@@ -10,6 +10,7 @@ extern "C" {
 #include <esp_check.h>
 #include <esp_attr.h>
 #include <driver/timer.h>
+#include <esp_timer.h>
 
 #include "bus/mini_i2c.h"
 }
