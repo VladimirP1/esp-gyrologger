@@ -152,6 +152,8 @@ void momentary_ground_task(void* param) {
         return;
     }
 
+    bool invert = (bool) param;
+    
     gpio_reset_pin(trig_gpio);
     gpio_set_direction(trig_gpio, GPIO_MODE_INPUT);
 
@@ -160,7 +162,7 @@ void momentary_ground_task(void* param) {
         if (prev_busy != gctx.logger_control.busy) {
             prev_busy = gctx.logger_control.busy;
             gpio_set_direction(trig_gpio, GPIO_MODE_OUTPUT);
-            gpio_set_level(trig_gpio, 0);
+            gpio_set_level(trig_gpio, invert);
             vTaskDelay(300 / portTICK_PERIOD_MS);
             gpio_set_direction(trig_gpio, GPIO_MODE_INPUT);
             ESP_LOGI(TAG, "trigger!");
@@ -223,7 +225,7 @@ void cam_control_task(void* param) {
             vTaskDelete(nullptr);
         } break;
         case 1: {
-            momentary_ground_task(param);
+            momentary_ground_task((void*)false);
         } break;
         case 2: {
             firefly_x_lite_task(param);
@@ -233,6 +235,9 @@ void cam_control_task(void* param) {
         } break;
         case 4: {
             gopro_wifi_task(param);
+        } break;
+        case 5: {
+            momentary_ground_task((void*)true);
         } break;
     }
 }
