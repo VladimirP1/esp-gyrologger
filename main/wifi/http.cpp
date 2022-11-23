@@ -2,8 +2,6 @@
 
 #include "http.hpp"
 
-#include "storage/utils.hpp"
-
 extern "C" {
 #include <esp_http_server.h>
 #include <esp_event.h>
@@ -222,8 +220,9 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
 
     entry("Avg gyro sample int. (ns)", std::to_string(gctx.logger_control.avg_sample_interval_ns));
 
-    auto free_space = get_free_space_kb();
-    entry("Free space (kBytes)", std::to_string(free_space.first));
+    int free, total;
+    get_free_space_kb(&free, &total);
+    entry("Free space (kBytes)", std::to_string(free));
 
     entry("Free heap size (kBytes)", std::to_string(esp_get_free_heap_size() / 1024));
 

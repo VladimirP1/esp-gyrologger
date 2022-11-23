@@ -3,37 +3,53 @@
 #include "storage_fat.h"
 
 #include <esp_vfs.h>
-#include <esp_vfs_fat.h>
+#include <esp_littlefs.h>
 #include <esp_system.h>
 #include <esp_log.h>
 #include <soc/timer_group_reg.h>
 #include <hal/wdt_hal.h>
 
-static const char *TAG = "storage_fat";
+const char* base_path = "/spiflash";
 
-static wl_handle_t s_wl_handle = WL_INVALID_HANDLE;
-
-const char *base_path = "/spiflash";
+static const char* TAG = "storage_littlefs";
 
 esp_err_t storage_fat_init() {
-    ESP_LOGI(TAG, "Mounting FAT filesystem");
-    const esp_vfs_fat_mount_config_t mount_config = {
+    ESP_LOGI(TAG, "Mounting LittleFs filesystem");
+    esp_vfs_littlefs_conf_t conf = {
+        .base_path = base_path,
+        .partition_label = "storage",
         .format_if_mount_failed = true,
-        .max_files = 4,
-        .allocation_unit_size = CONFIG_WL_SECTOR_SIZE,
+        .dont_mount = false,
     };
-    esp_err_t err = esp_vfs_fat_spiflash_mount(base_path, "storage", &mount_config, &s_wl_handle);
-    if (err != ESP_OK) {
-        ESP_LOGE(TAG, "Failed to mount FATFS (%s)", esp_err_to_name(err));
-        return ESP_FAIL;
+
+    // Use settings defined above to initialize and mount LittleFS filesystem.
+    // Note: esp_vfs_littlefs_register is an all-in-one convenience function.
+    esp_err_t ret = esp_vfs_littlefs_register(&conf);
+
+    if (ret != ESP_OK) {
+        if (ret == ESP_FAIL) {
+            ESP_LOGE(TAG, "Failed to mount or format filesystem");
+        } else if (ret == ESP_ERR_NOT_FOUND) {
+            ESP_LOGE(TAG, "Failed to find LittleFS partition");
+        } else {
+            ESP_LOGE(TAG, "Failed to initialize LittleFS (%s)", esp_err_to_name(ret));
+        }
+        return;
     }
     return ESP_OK;
 }
 
 esp_err_t storage_fat_deinit() {
-    ESP_LOGI(TAG, "Unmounting FAT filesystem");
-    ESP_ERROR_CHECK(esp_vfs_fat_spiflash_unmount(base_path, s_wl_handle));
+    ESP_LOGI(TAG, "Unmounting LittleFs filesystem");
+    esp_vfs_littlefs_unregister("storage");
     return ESP_OK;
+}
+
+void get_free_space_kb(int* free, int* total) {
+    size_t total_ = 0, used_ = 0;
+    esp_littlefs_info("storage", &total_, &used_);
+    *free = (total_ - used_) / 1024;
+    *total = total_ / 1024;
 }
 
 void wdt_off() {

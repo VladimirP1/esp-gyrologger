@@ -7,11 +7,11 @@ extern "C" {
 #include "rom/ets_sys.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "storage/storage_fat.h"
 }
 
 #include "bus/aux_i2c.hpp"
 
-#include "storage/utils.hpp"
 #include "filters/gyro_ring.hpp"
 #include "global_context.hpp"
 
@@ -121,10 +121,11 @@ void work_64x32() {
         u8g2_SetFontPosTop(&u8g2);
         u8g2_DrawStr(&u8g2, 0, 0, fname.c_str());
 
-        auto df_info = get_free_space_kb();
+        int free, total;
+        get_free_space_kb(&free, &total);
         char buf[32];
         snprintf(buf, 32, "%02d:%02d %.1fM%c", total_time_s / 60, total_time_s % 60,
-                 df_info.first / 1e3, gctx.wifi_active ? '!' : ' ');
+                free / 1e3, gctx.wifi_active ? '!' : ' ');
 
         u8g2_SetFont(&u8g2, u8g2_font_mozart_nbp_tr);
         u8g2_SetFontRefHeightText(&u8g2);
