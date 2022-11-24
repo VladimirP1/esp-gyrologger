@@ -13,7 +13,6 @@ extern "C" {
 #include <esp_log.h>
 #include <esp_console.h>
 #include <argtable3/argtable3.h>
-#include "storage/storage_fat.h"
 }
 
 #include <cstring>
@@ -22,6 +21,7 @@ extern "C" {
 
 #include "compression/lib/compression.hpp"
 #include "filters/gyro_ring.hpp"
+#include "storage/utils.hpp"
 
 #include "global_context.hpp"
 
@@ -218,8 +218,7 @@ void logger_task(void *params_pvoid) {
             }
             esp_vfs_fsync(fileno(f));
         }
-        int free, total;
-        get_free_space_kb(&free, &total);
+        auto [free, total] = get_free_space_kb();
         if (free < 90 && free > 0) {
             delete_oldest();
         }
