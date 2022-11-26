@@ -23,6 +23,8 @@ Different methods either to start logging with camera or to start camera with lo
 1. Momentary ground. Short the pin specified in "Cam control pin" to ground for 300ms when logging is started and when it is stopped.
 2. Firefly X Lite over wifi. This will connect to the camera through wifi network specified in "WiFi station ssid/password" and listen for recording started/stopped events to start/stop logging.
 3. Runcam protocol. This will setup an UART RX on "Cam control pin" and wait for recording to be started from FC to start/stop logging.
+4. Gopro over wifi. Enter your GoPro's wifi ssid/password into "Wifi station ssid/password" and the logger will automatically start/stop the recording on gopro when logging is started/stopped.
+5. Momentary vcc. Identical to momentary ground, but inverted.
 ### Start logging on boot
 This will automatically start logging on boot.
 ### Wifi auto off (seconds)
@@ -31,6 +33,14 @@ This will disable wifi automatically if nobody is connected for this amount of s
 This number is used to generate the log filename (eg 0 results in prefix LAA, 1 in LAB, 2 in LAC).
 You can increment this number by pressing the button for > 2s.
 This can be useful if you changed the memory card 
+### Display type
+This enables support for an i2c oled display on the same bus as the IMU.
+If the display is enabled, you can view the screencast over HTTP at http://192.168.4.1/display
+
+0. Disable display.
+1. SSD1306 64x32
+2. SSD1306 72x40 (like on the ESP32-C3-0.42LCD board)
+
 ### IMU Orientation
 IMU orientation which will be embedded into the gcsv files. Make sure you reload the download page after changing this.
 ### WiFi password
