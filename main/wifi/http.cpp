@@ -29,6 +29,10 @@ static const char* TAG = "http-server";
 
 #include "http_strings.hpp"
 
+#ifndef MIN
+#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#endif
+
 #define HANDLE(x)        \
     if ((x) != ESP_OK) { \
         return ESP_FAIL; \
