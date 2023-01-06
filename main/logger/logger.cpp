@@ -21,7 +21,7 @@ extern "C" {
 
 #include "compression/lib/compression.hpp"
 #include "filters/gyro_ring.hpp"
-#include "storage/utils.hpp"
+#include "storage/storage_fat.hpp"
 
 #include "global_context.hpp"
 

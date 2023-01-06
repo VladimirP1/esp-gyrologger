@@ -56,6 +56,10 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"wifi_timeout", "Wifi auto off (seconds)", 0, 3600, 0},
     {"file_epoch", "Epoch", 0, 128, 0},
     {"display_type", "Display type", 0, 10, 0},
+    {"sd_mosi", "SD card MOSI", -1.0, 64.0, -1},
+    {"sd_miso", "SD card MISO", -1.0, 64.0, -1},
+    {"sd_sck", "SD card SCK", -1.0, 64.0, -1},
+    {"sd_cs", "SD card CS", -1.0, 64.0, -1},
     #if EXPERIMENTAL_BATTERY
     {"dcdc_en", "DC-DC enable pin", -1.0, 64.0, -1.0},
     {"volt_thresh", "Batt volt min (mv)", 0.0, 6000.0, 3000.0},

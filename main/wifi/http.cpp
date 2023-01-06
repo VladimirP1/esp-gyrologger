@@ -2,20 +2,16 @@
 
 #include "http.hpp"
 
-#include "storage/utils.hpp"
-
 extern "C" {
 #include <esp_http_server.h>
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_partition.h>
-#include <ff.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
 
-#include "storage/storage_fat.h"
 #include "spi_flash_chip_driver.h"
 }
 #include <cstdio>
@@ -24,6 +20,7 @@ extern "C" {
 
 #include "compression/lib/compression.hpp"
 #include "storage/settings.hpp"
+#include "storage/storage_fat.hpp"
 #include "display.hpp"
 
 #include <string>

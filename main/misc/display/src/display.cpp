@@ -11,9 +11,9 @@ extern "C" {
 
 #include "bus/aux_i2c.hpp"
 
-#include "storage/utils.hpp"
 #include "filters/gyro_ring.hpp"
 #include "global_context.hpp"
+#include "storage/storage_fat.hpp"
 
 #include <string>
 
@@ -123,8 +123,13 @@ void work_64x32() {
 
         auto df_info = get_free_space_kb();
         char buf[32];
-        snprintf(buf, 32, "%02d:%02d %.1fM%c", total_time_s / 60, total_time_s % 60,
-                 df_info.first / 1e3, gctx.wifi_active ? '!' : ' ');
+        if (df_info.first < 10000) {
+            snprintf(buf, 32, "%02d:%02d %.1fM%c", total_time_s / 60, total_time_s % 60,
+                     df_info.first / 1e3, gctx.wifi_active ? '!' : ' ');
+        } else {
+             snprintf(buf, 32, "%02d:%02d %.1fG%c", total_time_s / 60, total_time_s % 60,
+                     df_info.first / 1e6, gctx.wifi_active ? '!' : ' ');
+        }
 
         u8g2_SetFont(&u8g2, u8g2_font_mozart_nbp_tr);
         u8g2_SetFontRefHeightText(&u8g2);

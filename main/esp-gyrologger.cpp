@@ -13,8 +13,6 @@ extern "C" {
 
 #include <string.h>
 #include <stdio.h>
-
-#include "storage/storage_fat.h"
 }
 
 #include "misc/misc.hpp"
@@ -26,6 +24,7 @@ extern "C" {
 #include "logger/logger.hpp"
 #include "filters/gyro_ring.hpp"
 #include "storage/settings.hpp"
+#include "storage/storage_fat.hpp"
 
 #include "global_context.hpp"
 #include "bus/aux_i2c.hpp"
