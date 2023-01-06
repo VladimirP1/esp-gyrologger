@@ -41,6 +41,9 @@ If the display is enabled, you can view the screencast over HTTP at http://192.1
 1. SSD1306 64x32
 2. SSD1306 72x40 (like on the ESP32-C3-0.42LCD board)
 
+### SD card MOSI/MISO/SCK/CS
+You can connect an external SD card over SPI to the logger. Put the pin numbers you have connected it to here.
+It is not yet possible to read the logs directly from SD card - they are stored in compressed form, so the web UI still needs to be used to download them.
 ### IMU Orientation
 IMU orientation which will be embedded into the gcsv files. Make sure you reload the download page after changing this.
 ### WiFi password
