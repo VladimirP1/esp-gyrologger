@@ -182,7 +182,7 @@ void runcam_protocol_listen_task(void* param) {
     gpio_reset_pin(rx_gpio);
 
     uart_config_t uart_config = {
-        .baud_rate = 115200,
+        .baud_rate = static_cast<int>(gctx.settings_manager->Get("rc_uart_baud")),
         .data_bits = UART_DATA_8_BITS,
         .parity = UART_PARITY_DISABLE,
         .stop_bits = UART_STOP_BITS_1,

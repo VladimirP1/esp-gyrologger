@@ -52,6 +52,7 @@ static const std::initializer_list<Setting> kSettingDescriptor = {
     {"dyn_lr_smooth", "Dyn filter tracking smoothing", 0.0001, 1.0, 0.005},
     {"cam_ctrl_type", "Cam control type", 0, 3, 0},
     {"trig_gpio_0", "Cam control pin", -1, 64.0, -1},
+    {"rc_uart_baud", "Baud for runcam protocol", 0, 1000000, 115200},
     {"loop_mode", "Start logging on boot", 0, 1, 0},
     {"wifi_timeout", "Wifi auto off (seconds)", 0, 3600, 0},
     {"file_epoch", "Epoch", 0, 128, 0},
