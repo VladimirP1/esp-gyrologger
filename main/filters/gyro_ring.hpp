@@ -3,7 +3,7 @@
 #include "compression/lib/fixquat.hpp"
 #include "global_context.hpp"
 
-#include "dyn_notch.hpp"
+#include "pt_filter.hpp"
 #include "storage/settings.hpp"
 
 extern "C" {
@@ -201,12 +201,6 @@ class GyroRing {
         gctx.filter_settings.pt_cutoff = gctx.settings_manager->Get("pt_cutoff");
         gctx.filter_settings.accel_pt_order = gctx.settings_manager->Get("acc_pt_count");
         gctx.filter_settings.accel_pt_cutoff = gctx.settings_manager->Get("acc_pt_cutoff");
-        gctx.filter_settings.dyn_count = gctx.settings_manager->Get("dyn_count");
-        gctx.filter_settings.dyn_freq_min = gctx.settings_manager->Get("dyn_freq_min");
-        gctx.filter_settings.dyn_freq_max = gctx.settings_manager->Get("dyn_freq_max");
-        gctx.filter_settings.dyn_q = gctx.settings_manager->Get("dyn_q");
-        gctx.filter_settings.dyn_lr = gctx.settings_manager->Get("dyn_lr");
-        gctx.filter_settings.dyn_lr_smooth = gctx.settings_manager->Get("dyn_lr_smooth");
     }
 
     void Init(int capacity, int chunk_size, uint32_t desired_interval) {
@@ -277,26 +271,6 @@ class GyroRing {
                 gyro.z = pts_[2]->apply(gyro.z);
             }
 
-            for (int i = 0; i < gctx.filter_settings.dyn_count; ++i) {
-                if (!notches_[i]) {
-                    notches_[i] = new DynamicNotch(
-                        gctx.gyro_sr, gctx.filter_settings.dyn_freq_min,
-                        gctx.filter_settings.dyn_freq_max, gctx.filter_settings.dyn_q,
-                        gctx.filter_settings.dyn_lr, gctx.filter_settings.dyn_lr_smooth);
-                    notches_[i + 12] = new DynamicNotch(
-                        gctx.gyro_sr, gctx.filter_settings.dyn_freq_min,
-                        gctx.filter_settings.dyn_freq_max, gctx.filter_settings.dyn_q,
-                        gctx.filter_settings.dyn_lr, gctx.filter_settings.dyn_lr_smooth);
-                    notches_[i + 24] = new DynamicNotch(
-                        gctx.gyro_sr, gctx.filter_settings.dyn_freq_min,
-                        gctx.filter_settings.dyn_freq_max, gctx.filter_settings.dyn_q,
-                        gctx.filter_settings.dyn_lr, gctx.filter_settings.dyn_lr_smooth);
-                }
-                gyro.x = notches_[i]->apply(gyro.x);
-                gyro.y = notches_[i + 12]->apply(gyro.y);
-                gyro.z = notches_[i + 24]->apply(gyro.z);
-            }
-
             if (fpm::abs(gyro.x) > quat::base_type{2} || fpm::abs(gyro.y) > quat::base_type{2} ||
                 fpm::abs(gyro.z) > quat::base_type{2}) {
                 ESP_LOGW("ring", "Filter unstable?");
@@ -326,7 +300,6 @@ class GyroRing {
                 f_accel.y = pts_accel_[1]->apply(accel.y);
                 f_accel.z = pts_accel_[2]->apply(accel.z);
                 f_accel = pred.conj().rotate_point(f_accel);
-                // printf("accel\n");
             }
             {
                 static int accel_div{};
@@ -464,7 +437,6 @@ class GyroRing {
 
     int acc_rptr_{}, acc_wptr_{};
 
-    DynamicNotch *notches_[36] = {};
     PtFilter *pts_[3] = {};
     PtFilter *pts_accel_[3] = {};
 

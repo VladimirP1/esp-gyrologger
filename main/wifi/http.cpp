@@ -107,7 +107,7 @@ t,gx,gy,gz,ax,ay,ax
     ESP_LOGI(TAG, "file size is %ld bytes", ftell(f));
     fseek(f, 0L, SEEK_SET);
 
-    Coder decoder(kBlockSize);
+    Coder decoder(kBlockSize, 22);
 
     int have_bytes = 0;
     int time = 0;

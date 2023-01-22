@@ -13,7 +13,7 @@ static constexpr double gscale = 1 / 0.00053263221;
 static int ztime = 0;
 static int pos = 0;
 static quat::quat prev_quat(quat::base_type{1}, {}, {}, {});
-static Coder decoder(kBlockSize);
+static Coder decoder(kBlockSize, 22);
 
 extern "C" {
 EMSCRIPTEN_KEEPALIVE
@@ -22,7 +22,7 @@ uint8_t* allocate_input(int size) {
     ztime = 0;
     pos = 0;
     prev_quat = {quat::base_type{1}, {}, {}, {}};
-    decoder = Coder{kBlockSize};
+    decoder = Coder{kBlockSize, 22};
     return input.data();
 }
 

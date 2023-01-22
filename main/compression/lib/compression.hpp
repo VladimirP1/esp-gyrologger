@@ -27,10 +27,7 @@ class Coder {
     } qp;
 
     int block_size;
-    quat::base_type target_quality_deg{-1};
-    int target_block_size{};
-    bool enable_pressure{};
-    int pressure_cnt{};
+    int fixed_qp;
 
     std::vector<uint8_t> compressed_block;
 
@@ -54,78 +51,10 @@ class Coder {
                 R::from_raw_value(((int)update.z) << scale)};
     }
 
-    bool update_qp(int bytes_put, quat::base_type max_error, int tr) {
-        if (target_block_size < 0) {
-            if (qp.scale != -target_block_size) {
-                qp.scale = -target_block_size;
-                return true;
-            } else {
-                return false;
-            }
-        }
-        if (enable_pressure && (tr == 0) && (++pressure_cnt % 10 == 0)) {
-            qp.scale += 1;
-        } else {
-            if (target_quality_deg >= quat::base_type{0} && !target_block_size) {
-                if (max_error > target_quality_deg) {
-                    qp.scale -= 1;
-                } else if (!enable_pressure &&
-                           max_error < target_quality_deg / quat::base_type{1.5}) {
-                    qp.scale += 1;
-                } else {
-                    return false;
-                }
-            } else if (target_quality_deg >= quat::base_type{0}) {
-                if (bytes_put > target_block_size) {
-                    qp.scale += 1;
-                } else if (max_error > target_quality_deg) {
-                    qp.scale -= 1;
-                } else if (max_error < target_quality_deg / quat::base_type{1.5}) {
-                    qp.scale += 1;
-                } else {
-                    return false;
-                }
-            } else {
-                if (bytes_put > target_block_size) {
-                    qp.scale += 1;
-                } else if (bytes_put < target_block_size / 1.5) {
-                    qp.scale -= 1;
-                } else {
-                    return false;
-                }
-            }
-        }
-        qp.scale = std::max(std::min((int)qp.scale, 20), 8);
-        return true;
-    }
-
    public:
-    struct BitrateModeConstantQP {};
-    struct BitrateModeConstantQuality {};
-    struct BitrateModeConstantQualityWithPressure {};
-    struct BitrateModeConstantBitrate {};
-    struct BitrateModeConstantQualityLimited {};
-
-    explicit Coder(int block_size, BitrateModeConstantQP m, int qp)
-        : block_size(block_size), target_block_size(-qp) {}
-
-    explicit Coder(int block_size, BitrateModeConstantBitrate m, int target_block_size)
-        : block_size(block_size), target_block_size(target_block_size) {}
-
-    explicit Coder(int block_size, BitrateModeConstantQuality m, double target_quality_deg)
-        : block_size(block_size), target_quality_deg(target_quality_deg) {}
-
-    explicit Coder(int block_size, BitrateModeConstantQualityWithPressure m,
-                   double target_quality_deg)
-        : block_size(block_size), target_quality_deg(target_quality_deg), enable_pressure(true) {}
-
-    explicit Coder(int block_size, BitrateModeConstantQualityLimited m, double target_quality_deg,
-                   int max_block_size)
-        : block_size(block_size),
-          target_quality_deg(target_quality_deg),
-          target_block_size(max_block_size) {}
-
-    explicit Coder(int block_size) : block_size(block_size) {}
+    explicit Coder(int block_size, int qp) : block_size(block_size), fixed_qp(qp) {
+        this->qp.scale = qp;
+    }
 
     std::pair<std::vector<uint8_t>&, quat::base_type> encode_block(quat::quat* quats) {
         struct UpdateEncoder {
@@ -233,10 +162,9 @@ class Coder {
             *(--compressed_ptr) = qp.scale;
 
             bytes_put = compressed_block.data() + compressed_block.size() - compressed_ptr;
-
-            if (!update_qp(bytes_put, max_angle_error_rad, tr)) {
-                break;
-            }
+            
+            qp.scale = fixed_qp;
+            break;
         }
         // std::cout << "Put " << bytes_put
         //           << " bytes; max error = " << double(max_angle_error_rad) * 180.0 / M_PI
