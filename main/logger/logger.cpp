@@ -27,17 +27,7 @@ extern "C" {
 
 #define TAG "logger"
 
-bool validate_file_name(std::string &s) {
-    if (s.size() != 12) return false;
-    for (int i = 0; i < 3; ++i)
-        if (char c = toupper(s[i]); c < 'A' || c > 'Z') return false;
-    for (int i = 3; i < 8; ++i)
-        if (char c = s[i]; c < '0' || c > '9') return false;
-    if (char c = s[8]; c != '.') return false;
-    for (int i = 9; i < 12; ++i)
-        if (char c = toupper(s[i]); c < 'A' || c > 'Z') return false;
-    return true;
-}
+#include "storage/filenames.hpp"
 
 static esp_err_t find_good_filename(char *buf) {
     DIR *dp;
@@ -47,12 +37,11 @@ static esp_err_t find_good_filename(char *buf) {
     if (dp != NULL) {
         while ((ep = readdir(dp))) {
             std::string filename = ep->d_name;
-            if (!validate_file_name(filename)) {
+            int idx = filename_to_index(filename);
+            if (idx < 0) {
                 unlink(("/spiflash/" + filename).c_str());
                 continue;
             }
-            int idx = ((filename[1] - 'A') * 26 + (filename[2] - 'A')) * 100000 +
-                      std::stoi(filename.substr(3, 5));
             max_idx = std::max(idx, max_idx);
         }
         (void)closedir(dp);
@@ -68,9 +57,9 @@ static esp_err_t find_good_filename(char *buf) {
 
     if (epoch != max_idx / 100000) {
         ESP_LOGW(TAG, "%d != %d", epoch, max_idx / 100000);
-        snprintf(buf, 30, templ, 'A' + epoch / 26, 'A' + epoch % 26, 1);
+        index_to_filename(100000 * epoch + 1, buf);
     } else {
-        snprintf(buf, 30, templ, 'A' + epoch / 26, 'A' + epoch % 26, (max_idx % 100000) + 1);
+        index_to_filename(100000 * epoch + (max_idx % 100000) + 1, buf);
     }
     return ESP_OK;
 }
