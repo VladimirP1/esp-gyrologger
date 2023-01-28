@@ -8,6 +8,8 @@ idf_component_register(
         "gyro/gyro_mpu6050.cpp" 
         "gyro/gyro_icm42688.cpp" 
         "gyro/gyro_probe.cpp"
-        "filters/pt_filter.cpp" 
+        "gyro/gyro.cpp"
+        "pipeline/pt_filter.cpp" 
+        "pipeline/gyro_ctx.cpp"
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")
