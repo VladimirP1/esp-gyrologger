@@ -87,7 +87,8 @@ void app_main_cpp(void) {
     nwrite += writer::write_header(buf + nwrite, sizeof(buf) - nwrite);
     nwrite += writer::write_gyro_setup(gyro_ctx.gyr_block / gyro_ctx.gyr_div, buf + nwrite,
                                        sizeof(buf) - nwrite);
-    nwrite += writer::write_accel_setup(4, buf + nwrite, sizeof(buf) - nwrite);
+    nwrite += writer::write_accel_setup(gyro_ctx.acc_block / gyro_ctx.acc_div, 4, buf + nwrite,
+                                        sizeof(buf) - nwrite);
     if (write(fd, buf, nwrite) != nwrite) {
         ESP_LOGE("main", "write error");
     }
