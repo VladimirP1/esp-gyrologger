@@ -105,7 +105,7 @@ bool gyro_ctx_init(GyroCtx* ctx, GyroHal* hal) {
     ctx->acc_block = 1;
     ctx->gyr_block = ctx->acc_block * hal->accel_div;
     {
-        for (int a = 0; a < 1000; ++a) {
+        for (int a = 1000; a--;) {
             int g = a * hal->accel_div;
             int final_a_div = -1;
             int final_g_div = -1;

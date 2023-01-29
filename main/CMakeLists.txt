@@ -14,5 +14,6 @@ idf_component_register(
         "ebin-encoder-cpp/lib/quant.cpp"
         "ebin-encoder-cpp/lib/compress.cpp"
         "ebin-encoder-cpp/lib/laplace_model.cpp"
+        "ebin-encoder-cpp/lib/writer.cpp"
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")

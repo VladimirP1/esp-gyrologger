@@ -2,6 +2,8 @@
 
 #pragma once
 
+#include <cstdint>
+
 struct GyroHal {
     bool ready{};
     int terminate{};

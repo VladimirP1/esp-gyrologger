@@ -17,9 +17,12 @@ extern "C" {
 
 #include "gyro/gyro.hpp"
 #include "pipeline/gyro_ctx.hpp"
+#include "pipeline/pt_filter.hpp"
 #include "hal/fs.hpp"
 #include "bus/aux_i2c.hpp"
 #include "global_context.hpp"
+
+#include "ebin-encoder-cpp/lib/writer.hpp"
 
 #include <fcntl.h>
 #include <unistd.h>
@@ -37,6 +40,13 @@ static void nvs_init() {
 
 GyroHal gyro_hal{};
 GyroCtx gyro_ctx{};
+
+static uint8_t buf[2000];
+static int8_t scratch[2000];
+static quat::quat quats[5000];
+
+static constexpr float kGyroToRads = 1.0 / 32.8 * 3.141592 / 180.0;
+static constexpr float kAccelToG = 16.0 / 32767;
 
 void app_main_cpp(void) {
     ESP_LOGI(TAG, "heap %u", esp_get_free_heap_size());
@@ -70,11 +80,71 @@ void app_main_cpp(void) {
 
     vTaskDelay(5000 / portTICK_PERIOD_MS);
 
-    int fd = open("/flash/test.txt", O_CREAT | O_TRUNC | O_WRONLY);
+    int fd = open("/flash/test.bin", O_CREAT | O_TRUNC | O_WRONLY);
 
-    const char s[] = "Hello, world!\n";
-    write(fd, s, strlen(s));
+    size_t nwrite{};
+
+    nwrite += writer::write_header(buf + nwrite, sizeof(buf) - nwrite);
+    nwrite += writer::write_gyro_setup(gyro_ctx.gyr_block / gyro_ctx.gyr_div, buf + nwrite,
+                                       sizeof(buf) - nwrite);
+    nwrite += writer::write_accel_setup(4, buf + nwrite, sizeof(buf) - nwrite);
+    if (write(fd, buf, nwrite) != nwrite) {
+        ESP_LOGE("main", "write error");
+    }
+    nwrite = 0;
     fsync(fd);
+
+    int iter{};
+    quat::quat q{};
+    quant::State state{};
+    PtFilter gyro_filt{3, 150, gyro_hal.gyro_sr};
+    while (1) {
+        Descriptor desc{};
+        while (!gyro_ctx.queue->pop(&desc)) {
+            vTaskDelay(10 / portTICK_PERIOD_MS);
+        }
+        int16_t* gyro_ptr = (int16_t*)desc.ptr;
+        int16_t* accel_ptr = (int16_t*)(desc.ptr + gyro_ctx.gyr_block * 6);
+
+        // LPF
+        for (size_t i = 0; i < gyro_ctx.gyr_block; ++i) {
+            gyro_filt.apply3(gyro_ptr + 3 * i);
+        }
+
+        // integrate and decimate
+        float gscale = kGyroToRads * desc.dt / gyro_ctx.gyr_block * 1e-6;
+        for (size_t i = 0; i < gyro_ctx.gyr_block; i++) {
+            q = q * quat::quat{quat::vec{quat::base_type{gscale * gyro_ptr[3 * i + 0]},
+                                         quat::base_type{gscale * gyro_ptr[3 * i + 1]},
+                                         quat::base_type{gscale * gyro_ptr[3 * i + 2]}}};
+            if (i % 10 == 0) q = q.normalized();
+            if (i % gyro_ctx.gyr_div == 0) {
+                quats[i / gyro_ctx.gyr_div] = q;
+            }
+        }
+        auto qq = q.axis_angle();
+        ESP_LOGI("main", "q = %.2f %.2f %.2f", ((float)qq.x) * 180.0 / 3.14,
+                 ((float)qq.y) * 180.0 / 3.14, ((float)qq.z) * 180.0 / 3.14);
+
+        nwrite += writer::write_gyro_data(state, quats, gyro_ctx.gyr_block / gyro_ctx.gyr_div, buf,
+                                          sizeof(buf), scratch, sizeof(scratch));
+        if (write(fd, buf, nwrite) != nwrite) {
+            ESP_LOGI("main", "write error");
+        }
+        ESP_LOGI("main", "write %u (%d kbytes/min)", nwrite,
+                 nwrite * int(60.0 * gyro_hal.gyro_sr / gyro_ctx.gyr_block) / 1024);
+        nwrite = 0;
+        if (iter % 16 == 0) {
+            ESP_LOGW("main", "fsync");
+            fsync(fd);
+        }
+        ++iter;
+        gyro_ctx.queue->free(&desc);
+    }
+
+    // const char s[] = "Hello, world!\n";
+    // write(fd, s, strlen(s));
+    // fsync(fd);
 
     // while (1) {
     //     for (int i = 0; i < 100; ++i) {

@@ -10,7 +10,7 @@ extern "C" {
 }
 
 struct Descriptor {
-    void* ptr{};
+    uint8_t* ptr{};
     uint32_t size1{};
     uint32_t size2{};
     uint32_t dt{};
