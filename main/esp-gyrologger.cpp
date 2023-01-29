@@ -17,8 +17,12 @@ extern "C" {
 
 #include "gyro/gyro.hpp"
 #include "pipeline/gyro_ctx.hpp"
+#include "hal/fs.hpp"
 #include "bus/aux_i2c.hpp"
 #include "global_context.hpp"
+
+#include <fcntl.h>
+#include <unistd.h>
 
 static const char* TAG = "main";
 
@@ -41,7 +45,7 @@ void app_main_cpp(void) {
     gctx.aux_i2c_queue = xQueueCreate(1, sizeof(aux_i2c_msg_t));
 
     do {
-        if (!gyro_hal_init(&gyro_hal, 6, 5)) {
+        if (!gyro_hal_init(&gyro_hal, 5, 6)) {
             break;
         }
         if (!gyro_ctx_init(&gyro_ctx, &gyro_hal)) {
@@ -50,6 +54,28 @@ void app_main_cpp(void) {
         ESP_LOGI(TAG, "%s ready!", gyro_hal.gyro_type);
     } while (0);
 
+    do {
+        FsSettings fs_settings{
+            .external_sd = true, .pin_mosi = 3, .pin_miso = 7, .pin_clk = 8, .pin_cs = 4};
+        if (fs_init(&fs_settings)) {
+            break;
+        }
+        fs_settings.external_sd = false;
+        if (fs_init(&fs_settings)) {
+            break;
+        }
+    } while (0);
+
+    ESP_LOGI("main", "init done! free heap: %u", esp_get_free_heap_size());
+
+    vTaskDelay(5000 / portTICK_PERIOD_MS);
+
+    int fd = open("/flash/test.txt", O_CREAT | O_TRUNC | O_WRONLY);
+
+    const char s[] = "Hello, world!\n";
+    write(fd, s, strlen(s));
+    fsync(fd);
+
     // while (1) {
     //     for (int i = 0; i < 100; ++i) {
     //         Descriptor desc{};
@@ -57,7 +83,8 @@ void app_main_cpp(void) {
     //             vTaskDelay(10 / portTICK_PERIOD_MS);
     //         }
     //         gyro_ctx.queue->free(&desc);
-    //         ESP_LOGI(TAG, "%d %d %d %u", desc.size1, desc.size2, desc.dt, esp_get_free_heap_size());
+    //         ESP_LOGI(TAG, "%d %d %d %u", desc.size1, desc.size2, desc.dt,
+    //         esp_get_free_heap_size());
     //     }
     //     vTaskDelay(2000 / portTICK_PERIOD_MS);
     // }

@@ -2,11 +2,6 @@
 
 #pragma once
 
-#include "gyro_mpu6050.hpp"
-#include "gyro_bmi160.hpp"
-#include "gyro_icm42688.hpp"
-
-
 struct GyroHal {
     bool ready{};
     int terminate{};

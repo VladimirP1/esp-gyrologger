@@ -8,6 +8,7 @@ idf_component_register(
         "gyro/gyro_mpu6050.cpp" 
         "gyro/gyro_icm42688.cpp" 
         "gyro/gyro_probe.cpp"
+        "hal/fs.cpp"
         "pipeline/pt_filter.cpp" 
         "pipeline/gyro_ctx.cpp"
         "ebin-encoder-cpp/lib/quant.cpp"

@@ -1,5 +1,9 @@
 #include "gyro.hpp"
 
+#include "gyro_mpu6050.hpp"
+#include "gyro_bmi160.hpp"
+#include "gyro_icm42688.hpp"
+
 extern "C" {
 #include <freertos/FreeRTOS.h>
 #include <freertos/task.h>
