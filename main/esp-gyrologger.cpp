@@ -40,23 +40,27 @@ void app_main_cpp(void) {
     nvs_init();
     gctx.aux_i2c_queue = xQueueCreate(1, sizeof(aux_i2c_msg_t));
 
-    if (gyro_hal_init(&gyro_hal, 5, 6)) {
-        if (gyro_ctx_init(&gyro_ctx, &gyro_hal)) {
-            ESP_LOGI(TAG, "%s ready!", gyro_hal.gyro_type);
+    do {
+        if (!gyro_hal_init(&gyro_hal, 6, 5)) {
+            break;
         }
-    }
+        if (!gyro_ctx_init(&gyro_ctx, &gyro_hal)) {
+            break;
+        }
+        ESP_LOGI(TAG, "%s ready!", gyro_hal.gyro_type);
+    } while (0);
 
-    while (1) {
-        for (int i = 0; i < 100; ++i) {
-            Descriptor desc{};
-            while (!gyro_ctx.queue->pop(&desc)) {
-                vTaskDelay(10 / portTICK_PERIOD_MS);
-            }
-            gyro_ctx.queue->free(&desc);
-            ESP_LOGI(TAG, "%d %d %d %u", desc.size1, desc.size2, desc.dt, esp_get_free_heap_size());
-        }
-        vTaskDelay(2000 / portTICK_PERIOD_MS);
-    }
+    // while (1) {
+    //     for (int i = 0; i < 100; ++i) {
+    //         Descriptor desc{};
+    //         while (!gyro_ctx.queue->pop(&desc)) {
+    //             vTaskDelay(10 / portTICK_PERIOD_MS);
+    //         }
+    //         gyro_ctx.queue->free(&desc);
+    //         ESP_LOGI(TAG, "%d %d %d %u", desc.size1, desc.size2, desc.dt, esp_get_free_heap_size());
+    //     }
+    //     vTaskDelay(2000 / portTICK_PERIOD_MS);
+    // }
 }
 
 extern "C" {

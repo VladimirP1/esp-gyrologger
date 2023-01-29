@@ -8,8 +8,10 @@ idf_component_register(
         "gyro/gyro_mpu6050.cpp" 
         "gyro/gyro_icm42688.cpp" 
         "gyro/gyro_probe.cpp"
-        "gyro/gyro.cpp"
         "pipeline/pt_filter.cpp" 
         "pipeline/gyro_ctx.cpp"
+        "ebin-encoder-cpp/lib/quant.cpp"
+        "ebin-encoder-cpp/lib/compress.cpp"
+        "ebin-encoder-cpp/lib/laplace_model.cpp"
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")

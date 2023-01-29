@@ -103,11 +103,47 @@ bool gyro_ctx_init(GyroCtx* ctx, GyroHal* hal) {
 
     ctx->hal = hal;
     ctx->acc_block = 1;
-    while ((ctx->acc_block + 1) * hal->accel_div <= 256) ++ctx->acc_block;
     ctx->gyr_block = ctx->acc_block * hal->accel_div;
-    ESP_LOGI("gyro_ctx", "blk size: gyro: %d, acc: %d", ctx->gyr_block, ctx->acc_block);
-    ctx->queue =
-        new BufQueue(hal->gyro_sr / ctx->gyr_block, (ctx->gyr_block + ctx->acc_block) * 6);
+    {
+        for (int a = 0; a < 1000; ++a) {
+            int g = a * hal->accel_div;
+            int final_a_div = -1;
+            int final_g_div = -1;
+            if (hal->gyro_sr / 4 <= g && g <= hal->gyro_sr / 2) {
+                // ESP_LOGI("gyro_ctx", "blk %d/%d", a, g);
+                float blk_freq = hal->gyro_sr / g;
+                for (int a_div = 1; a_div <= a; ++a_div) {
+                    if (a % a_div == 0) {
+                        float a_final_sr = blk_freq * a / a_div;
+                        if (7 <= a_final_sr && a_final_sr <= 13) {
+                            // ESP_LOGI("gyro_ctx", "  sr a %f", a_final_sr);
+                            final_a_div = a_div;
+                        }
+                    }
+                }
+                for (int g_div = 1; g_div <= g; ++g_div) {
+                    if (g % g_div == 0) {
+                        float g_final_sr = blk_freq * g / g_div;
+                        if (490 <= g_final_sr && g_final_sr <= 590) {
+                            // ESP_LOGI("gyro_ctx", "  sr g %f", g_final_sr);
+                            final_g_div = g_div;
+                        }
+                    }
+                }
+                if (final_a_div > 0 && final_g_div > 0) {
+                    ctx->acc_block = a;
+                    ctx->gyr_block = g;
+                    ctx->acc_div = final_a_div;
+                    ctx->gyr_div = final_g_div;
+                }
+            }
+        }
+    }
+
+    ESP_LOGI("gyro_ctx", "blk size: %d/%d -> %d/%d", ctx->gyr_block, ctx->acc_block,
+             ctx->gyr_block / ctx->gyr_div, ctx->acc_block / ctx->acc_div);
+    ESP_LOGI("gyro_ctx", "sr      : %f/%f", hal->gyro_sr / ctx->gyr_div, hal->gyro_sr / hal->accel_div / ctx->acc_div);
+    ctx->queue = new BufQueue(hal->gyro_sr / ctx->gyr_block, (ctx->gyr_block + ctx->acc_block) * 6);
     ctx->queue->alloc(&ctx->desc);
     hal->cb_ctx = ctx;
     hal->gyro_cb = gyro_cb;

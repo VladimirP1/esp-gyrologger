@@ -45,6 +45,8 @@ struct GyroCtx {
     Descriptor desc{};
     size_t gyr_block{};
     size_t acc_block{};
+    int gyr_div{};
+    int acc_div{};
     size_t gyr_cnt{};
     size_t acc_cnt{};
     size_t drops{};
