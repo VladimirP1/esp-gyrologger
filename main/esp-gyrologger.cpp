@@ -97,7 +97,8 @@ void app_main_cpp(void) {
     int iter{};
     quat::quat q{};
     quant::State state{};
-    PtFilter gyro_filt{3, 150, gyro_hal.gyro_sr};
+    PtFilter gyro_filt{3, 125, gyro_hal.gyro_sr};
+    PtFilter accel_filt{3, 15, gyro_hal.gyro_sr};
     while (1) {
         Descriptor desc{};
         while (!gyro_ctx.queue->pop(&desc)) {
@@ -111,7 +112,11 @@ void app_main_cpp(void) {
             gyro_filt.apply3(gyro_ptr + 3 * i);
         }
 
-        // integrate and decimate
+        for (size_t i = 0; i < gyro_ctx.acc_block; ++i) {
+            accel_filt.apply3(accel_ptr + 3 * i);
+        }
+
+        // integrate and decimate gyro
         float gscale = kGyroToRads * desc.dt / gyro_ctx.gyr_block * 1e-6;
         for (size_t i = 0; i < gyro_ctx.gyr_block; i++) {
             q = q * quat::quat{quat::vec{quat::base_type{gscale * gyro_ptr[3 * i + 0]},
@@ -122,12 +127,24 @@ void app_main_cpp(void) {
                 quats[i / gyro_ctx.gyr_div] = q;
             }
         }
-        auto qq = q.axis_angle();
-        ESP_LOGI("main", "q = %.2f %.2f %.2f", ((float)qq.x) * 180.0 / 3.14,
-                 ((float)qq.y) * 180.0 / 3.14, ((float)qq.z) * 180.0 / 3.14);
+        // auto qq = q.axis_angle();
+        // ESP_LOGI("main", "q = %.2f %.2f %.2f", ((float)qq.x) * 180.0 / 3.14,
+        //          ((float)qq.y) * 180.0 / 3.14, ((float)qq.z) * 180.0 / 3.14);
 
-        nwrite += writer::write_gyro_data(state, quats, gyro_ctx.gyr_block / gyro_ctx.gyr_div, buf,
-                                          sizeof(buf), scratch, sizeof(scratch));
+        // decimate accel
+        for (size_t i = 0; i < gyro_ctx.acc_block / gyro_ctx.acc_div; ++i) {
+            int new_index = 3 * i;
+            int old_index = new_index * gyro_ctx.acc_div;
+            accel_ptr[new_index] = accel_ptr[old_index];
+        }
+
+        nwrite +=
+            writer::write_gyro_data(state, quats, gyro_ctx.gyr_block / gyro_ctx.gyr_div,
+                                    buf + nwrite, sizeof(buf) - nwrite, scratch, sizeof(scratch));
+        nwrite += writer::write_accel_data(accel_ptr, gyro_ctx.acc_block / gyro_ctx.acc_div,
+                                           buf + nwrite, sizeof(buf) - nwrite);
+        nwrite += writer::write_time_block(desc.dt, buf + nwrite, sizeof(buf) - nwrite);
+
         if (write(fd, buf, nwrite) != nwrite) {
             ESP_LOGI("main", "write error");
         }
