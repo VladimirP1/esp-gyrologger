@@ -112,7 +112,7 @@ bool gyro_ctx_init(GyroCtx* ctx, GyroHal* hal) {
             if (hal->gyro_sr / 4 <= g && g <= hal->gyro_sr / 2) {
                 // ESP_LOGI("gyro_ctx", "blk %d/%d", a, g);
                 float blk_freq = hal->gyro_sr / g;
-                for (int a_div = 1; a_div <= a; ++a_div) {
+                for (int a_div = a; a_div > 0; --a_div) {
                     if (a % a_div == 0) {
                         float a_final_sr = blk_freq * a / a_div;
                         if (7 <= a_final_sr && a_final_sr <= 13) {
@@ -130,7 +130,7 @@ bool gyro_ctx_init(GyroCtx* ctx, GyroHal* hal) {
                         }
                     }
                 }
-                if (final_a_div > 0 && final_g_div > 0) {
+                if (final_a_div > 0 && final_g_div > 0 && ((final_a_div * hal->accel_div) % final_g_div == 0)) {
                     ctx->acc_block = a;
                     ctx->gyr_block = g;
                     ctx->acc_div = final_a_div;
