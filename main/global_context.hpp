@@ -11,8 +11,9 @@ extern "C" {
 
 #define kBlockSize 256
 
-class GyroRing;
 class SettingsManager;
+class GyroHal;
+class GyroCtx;
 
 struct FilterSettings {
     int pt_order{};
@@ -20,17 +21,11 @@ struct FilterSettings {
 
     int accel_pt_order{};
     double accel_pt_cutoff{};
-
-    int dyn_count{};
-    int dyn_freq_min{};
-    int dyn_freq_max{};
-    int dyn_q{};
-    int dyn_lr{};
-    double dyn_lr_smooth{}; 
 };
 
 typedef struct {
-    GyroRing* gyro_ring;
+    GyroHal* gyro_hal{};
+    GyroCtx* gyro_ctx{};
     SettingsManager* settings_manager;
 
     uint8_t gyro_i2c_adr;
@@ -70,7 +65,7 @@ typedef struct {
     int battery_voltage_mv;
 
     QueueHandle_t aux_i2c_queue;
-    
+
     int wifi_stations;
     bool wifi_active;
 } GlobalContext;

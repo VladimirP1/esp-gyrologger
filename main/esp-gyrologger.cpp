@@ -21,14 +21,16 @@ extern "C" {
 #include "wifi/wifi.hpp"
 #include "wifi/cam_control.hpp"
 #include "gyro/gyro.hpp"
-#include "logger/logger.hpp"
-#include "filters/gyro_ring.hpp"
+#include "pipeline/gyro_ctx.hpp"
+#include "pipeline/logger.hpp"
+#include "hal/fs.hpp"
 #include "storage/settings.hpp"
-#include "storage/storage_fat.hpp"
 
 #include "global_context.hpp"
 #include "bus/aux_i2c.hpp"
-#include "display.hpp"
+// #include "display.hpp"
+
+#include "http/server.hpp"
 
 static const char *TAG = "main";
 
@@ -41,49 +43,63 @@ static void nvs_init() {
     ESP_ERROR_CHECK(ret);
 }
 
-extern void test();
-
-void test_task(void *params) {
-    // mini_i2c_set_timing(200000);
-    // mini_i2c_double_stop_timing();
-    // mini_i2c_double_stop_timing();
-    while (1) {
-        proc_aux_i2c();
-        vTaskDelay(1);
-    }
-}
-
 void app_main_cpp(void) {
     nvs_init();
 
+    gctx.aux_i2c_queue = xQueueCreate(1, sizeof(aux_i2c_msg_t));
     gctx.settings_manager = new SettingsManager();
+    gctx.gyro_hal = new GyroHal();
+    gctx.gyro_ctx = new GyroCtx();
+
+    // gctx.settings_manager->Set("wifi_dbm", 10);
 
 #if EXPERIMENTAL_BATTERY
     xTaskCreate(battery_task, "battery_task", 3084, NULL, configMAX_PRIORITIES - 4, NULL);
 #endif
 
     wifi_init();
-    display_setup();
+    // display_setup();
 
-    ESP_ERROR_CHECK(storage_fat_init());
+    do {
+        auto &sm = gctx.settings_manager;
+        int mosi = sm->Get("sd_mosi");
+        int miso = sm->Get("sd_miso");
+        int sck = sm->Get("sd_sck");
+        int cs = sm->Get("sd_cs");
+        FsSettings fs_settings{.external_sd = mosi != -1 && miso != -1 && sck != -1 && cs != -1,
+                               .pin_mosi = mosi,
+                               .pin_miso = miso,
+                               .pin_clk = sck,
+                               .pin_cs = cs};
+        if (fs_init(&fs_settings)) {
+            break;
+        }
+        fs_settings.external_sd = false;
+        if (fs_init(&fs_settings)) {
+            break;
+        }
+    } while (0);
 
-    gctx.logger_control.mutex = xSemaphoreCreateMutex();
-    gctx.logger_control.accel_raw_mtx = xSemaphoreCreateMutex();
-    gctx.gyro_ring = new GyroRing();
-    gctx.gyro_ring->Init(3072, kBlockSize, 1800);
+    do {
+        int sda_pin = gctx.settings_manager->Get("sda_pin");
+        int scl_pin = gctx.settings_manager->Get("scl_pin");
+        if (sda_pin >= 0 && scl_pin >= 0) {
+            if (!gyro_hal_init(gctx.gyro_hal, 5, 6)) {
+                break;
+            }
+            if (!gyro_ctx_init(gctx.gyro_ctx, gctx.gyro_hal)) {
+                break;
+            }
+            ESP_LOGI(TAG, "%s ready!", gctx.gyro_hal->gyro_type);
 
-    xTaskCreate(logger_task, "logger", 3084, NULL, configMAX_PRIORITIES - 3, NULL);
+            gctx.logger_control.mutex = xSemaphoreCreateMutex();
+            gctx.logger_control.accel_raw_mtx = xSemaphoreCreateMutex();
 
-    int sda_pin = gctx.settings_manager->Get("sda_pin");
-    int scl_pin = gctx.settings_manager->Get("scl_pin");
-    if (sda_pin >= 0 && scl_pin >= 0) {
-        ESP_ERROR_CHECK(mini_i2c_init(gctx.settings_manager->Get("sda_pin"),
-                                      gctx.settings_manager->Get("scl_pin"), 400000));
-        gctx.aux_i2c_queue = xQueueCreate(1, sizeof(aux_i2c_msg_t));
-        gyro_probe_and_start_task();
-    } else {
-        ESP_LOGW(TAG, "Please assign i2c gpio pins!");
-    }
+            xTaskCreate(logger_task, "logger", 3084, NULL, configMAX_PRIORITIES - 3, NULL);
+        } else {
+            ESP_LOGW(TAG, "Please assign i2c gpio pins!");
+        }
+    } while (0);
 
     if (gctx.settings_manager->Get("led_type") < 0.5) {
         xTaskCreate(led_task, "led-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
@@ -92,9 +108,11 @@ void app_main_cpp(void) {
     }
     xTaskCreate(button_task, "button-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
     xTaskCreate(cam_control_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
-    xTaskCreate(display_task, "display-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
+    // xTaskCreate(display_task, "display-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
 
-    http_init();
+    xTaskCreate(server_task, "server-task", 8192, NULL, configMAX_PRIORITIES - 4, NULL);
+
+    // http_init();
 }
 
 extern "C" {

@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: LGPL-2.1-or-later
 
+#include "gyro.hpp"
 #include "gyro_mpu6050.hpp"
 
 extern "C" {
@@ -15,7 +16,6 @@ extern "C" {
 }
 
 #include "global_context.hpp"
-#include "filters/gyro_ring.hpp"
 #include "bus/aux_i2c.hpp"
 
 static const char *TAG = "gyro_mpu";
@@ -71,7 +71,9 @@ static const char *TAG = "gyro_mpu";
 static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg);
 
 static void IRAM_ATTR gyro_i2c_cb(void *arg) {
-    if (gctx.terminate_for_update) {
+    GyroHal *gyro_hal = (GyroHal *)arg;
+    if (gyro_hal->terminate) {
+        gyro_hal->terminate = 2;
         return;
     }
 
@@ -79,26 +81,27 @@ static void IRAM_ATTR gyro_i2c_cb(void *arg) {
     static uint64_t prev_time = 0;
     uint64_t time = esp_timer_get_time();
     if (mini_i2c_read_reg_get_result(tmp_data, FIFO_SAMPLE_SIZE) == ESP_OK) {
-        gctx.gyro_ring->Push((time - prev_time) * 1000,
-                             static_cast<int>((int16_t)((tmp_data[6] << 8) | tmp_data[7])),
-                             static_cast<int>((int16_t)((tmp_data[8] << 8) | tmp_data[9])),
-                             static_cast<int>((int16_t)((tmp_data[10] << 8) | tmp_data[11])),
-                             static_cast<int>((int16_t)((tmp_data[0] << 8) | tmp_data[1])),
-                             static_cast<int>((int16_t)((tmp_data[2] << 8) | tmp_data[3])),
-                             static_cast<int>((int16_t)((tmp_data[4] << 8) | tmp_data[5])),
-                             kFlagHaveAccel);
+        int16_t gyro[3] = {(int16_t)((tmp_data[6] << 8) | tmp_data[7]),
+                           (int16_t)((tmp_data[8] << 8) | tmp_data[9]),
+                           (int16_t)((tmp_data[10] << 8) | tmp_data[11])};
+        int16_t accel[3] = {(int16_t)((tmp_data[0] << 8) | tmp_data[1]),
+                            (int16_t)((tmp_data[2] << 8) | tmp_data[3]),
+                            (int16_t)((tmp_data[4] << 8) | tmp_data[5])};
+        if (gyro_hal->gyro_cb) gyro_hal->gyro_cb(gyro, time - prev_time, gyro_hal->cb_ctx);
+        if (gyro_hal->accel_cb) gyro_hal->accel_cb(accel, gyro_hal->cb_ctx);
         prev_time = time;
     } else {
         mini_i2c_hw_fsm_reset();
     }
-    
+
     proc_aux_i2c();
-    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
-                               nullptr);
+    mini_i2c_read_reg_callback(gyro_hal->i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb, arg);
 }
 
 static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
-    if (gctx.terminate_for_update) {
+    GyroHal *gyro_hal = (GyroHal *)arg;
+    if (gyro_hal->terminate) {
+        gyro_hal->terminate = 2;
         return;
     }
 
@@ -116,11 +119,11 @@ static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
     }
 
     if (fifo_bytes > 0) {
-        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_RW, FIFO_SAMPLE_SIZE, gyro_i2c_cb,
-                                   NULL);
+        mini_i2c_read_reg_callback(gyro_hal->i2c_adr, REG_FIFO_RW, FIFO_SAMPLE_SIZE, gyro_i2c_cb,
+                                   arg);
     } else {
-        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
-                                   nullptr);
+        mini_i2c_read_reg_callback(gyro_hal->i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
+                                   arg);
     }
 }
 
@@ -132,9 +135,11 @@ bool probe_mpu6050(uint8_t dev_adr) {
     return data[0] == 0x68 || data[0] == 0x19;
 }
 
-void gyro_mpu6050_task(void *params_pvoid) {
-    gctx.gyro_sr = 2000.0;
-    gctx.accel_sr = 2000.0;
+void gyro_mpu6050_task(void *params) {
+    GyroHal *gyro_hal = (GyroHal *)params;
+    gyro_hal->gyro_sr = 2000.0;
+    gyro_hal->accel_div = 1;
+    gyro_hal->gyro_type = "mpu6000";
 
     /* This is needed for 2k sample rate */
     mini_i2c_set_timing(500000);
@@ -145,35 +150,36 @@ void gyro_mpu6050_task(void *params_pvoid) {
 
     /* Reset */
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, REG_PWR_MGMT_1_MASK_RESET));
+        mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_PWR_MGMT_1, REG_PWR_MGMT_1_MASK_RESET));
     ESP_LOGI(TAG, "IMU reset");
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, 0));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_PWR_MGMT_1, 0));
     ESP_LOGI(TAG, "IMU wake up");
 
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1,
+        mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_PWR_MGMT_1,
                                 REG_PWR_MGMT_1_VALUE_CLKSEL_ZGYRO << REG_PWR_MGMT_1_BIT_CLKSEL_0));
     ESP_LOGI(TAG, "IMU change clock");
 
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_SMPRT_DIV, 3));
+        mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_SMPRT_DIV, 3));
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYRO_CONFIG,
+        mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_GYRO_CONFIG,
                                 REG_GYRO_CONFIG_VALUE_FS_1000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACCEL_CONFIG,
+        mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_ACCEL_CONFIG,
                                 REG_ACCEL_CONFIG_VALUE_FS_16_G << REG_ACCEL_CONFIG_BIT_FS_SEL_0));
 
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_EN,
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_FIFO_EN,
                                             REG_FIFO_EN_MASK_ACCEL | REG_FIFO_EN_MASK_GYRO));
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_USER_CONTROL,
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gyro_hal->i2c_adr, REG_USER_CONTROL,
                                             REG_USER_CONTROL_MASK_FIFO_EN));
 
-    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
-                               nullptr);
+    gyro_hal->ready = 1;
+    mini_i2c_read_reg_callback(gyro_hal->i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
+                               params);
 
     vTaskDelete(NULL);
 }

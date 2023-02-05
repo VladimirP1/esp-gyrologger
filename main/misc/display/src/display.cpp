@@ -11,9 +11,8 @@ extern "C" {
 
 #include "bus/aux_i2c.hpp"
 
-#include "filters/gyro_ring.hpp"
 #include "global_context.hpp"
-#include "storage/storage_fat.hpp"
+#include "hal/fs.hpp"
 
 #include <string>
 

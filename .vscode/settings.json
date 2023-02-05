@@ -119,12 +119,13 @@
         "esp_check.h": "c",
         "esp_wifi.h": "c",
         "variant": "cpp",
-        "gyro_ring.hpp": "c"
+        "gyro_ring.hpp": "c",
+        "mongoose.h": "c"
     },
     "idf.flashType": "UART",
     "idf.adapterTargetName": "esp32c3",
     "idf.openOcdConfigs": [
         "board/esp32c3-builtin.cfg"
     ],
-    "idf.portWin": "COM5"
+    "idf.portWin": "COM3"
 }

@@ -11,6 +11,8 @@ extern "C" {
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <dirent.h>
+#include <fcntl.h>
+#include <unistd.h>
 
 #include "spi_flash_chip_driver.h"
 }
@@ -18,19 +20,21 @@ extern "C" {
 
 #include "global_context.hpp"
 
-#include "compression/lib/compression.hpp"
 #include "storage/settings.hpp"
-#include "storage/storage_fat.hpp"
+#include "hal/wdt_off.hpp"
+#include "hal/fs.hpp"
 #include "display.hpp"
 
 #include <string>
+#include <vector>
+#include <algorithm>
 
 static const char* TAG = "http-server";
 
 #include "http_strings.hpp"
 
 #ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
 #define HANDLE(x)        \
@@ -49,113 +53,28 @@ static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
     int bytes_total = 0;
 
     ESP_LOGI(TAG, "Reading file");
-    FILE* f = fopen(filename, "rb");
-    if (f == NULL) {
+    int fd = open(filename, O_RDONLY);
+    if (fd < 0) {
         ESP_LOGE(TAG, "Failed to open file for reading");
         return ESP_FAIL;
     }
 
-    fseek(f, 0L, SEEK_END);
-    bytes_total = ftell(f);
+    bytes_total = lseek(fd, (size_t)0, SEEK_END);
     ESP_LOGI(TAG, "file size is %d bytes", bytes_total);
-    fseek(f, 0L, SEEK_SET);
+    lseek(fd, 0, SEEK_SET);
 
     while (true) {
-        int read_bytes = fread(buf2, 1, MIN(bytes_total, 256), f);
+        int read_bytes = read(fd, buf2, MIN(bytes_total, 256));
 
         if (read_bytes < 0) {
             ESP_LOGE(TAG, "read error");
             break;
         }
 
-        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, read_bytes), fclose(f));
+        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf2, read_bytes), close(fd));
     }
 
-    fclose(f);
-
-    HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), ;);
-
-    return ESP_OK;
-}
-
-static esp_err_t respond_with_file(httpd_req_t* req, const char* filename) {
-    static uint8_t buf2[2000];
-    static char buf_text[4096];
-
-    const double sample_rate = 1.0 / 0.00180;
-    const double gscale = 1 / 0.00053263221;
-
-    HANDLE(httpd_resp_send_chunk(req, R"--(GYROFLOW IMU LOG
-version,1.1
-id,esplog
-orientation,YxZ
-tscale,0.00180
-gscale,0.00053263221
-ascale,0.0001
-t,gx,gy,gz,ax,ay,ax
-)--",
-                                 HTTPD_RESP_USE_STRLEN));
-
-    ESP_LOGI(TAG, "Reading file");
-    FILE* f = fopen(filename, "rb");
-    if (f == NULL) {
-        ESP_LOGE(TAG, "Failed to open file for reading");
-        return ESP_FAIL;
-    }
-
-    fseek(f, 0L, SEEK_END);
-    ESP_LOGI(TAG, "file size is %ld bytes", ftell(f));
-    fseek(f, 0L, SEEK_SET);
-
-    Coder decoder(kBlockSize, 22);
-
-    int have_bytes = 0;
-    int time = 0;
-    quat::quat prev_quat{};
-    char* wptr = buf_text;
-    while (true) {
-        int read_bytes = fread(buf2 + have_bytes, 1, 2000 - have_bytes, f);
-        have_bytes += read_bytes;
-
-        if (have_bytes < 2000) break;
-
-        auto [decoded_bytes, dquats, scale] = decoder.decode_block(buf2);
-        for (auto& q : dquats) {
-            quat::vec rv = (q.conj() * prev_quat).axis_angle();
-            quat::vec gravity = q.conj().rotate_point(
-                {quat::base_type{}, quat::base_type{}, quat::base_type{-1.0}});
-
-            prev_quat = q;
-            if (time != 0) {
-                double scale = sample_rate * gscale;
-                double ascale = 10000;
-                int size =
-                    snprintf(wptr, sizeof(buf_text) - (wptr - buf_text), "%d,%d,%d,%d,%d,%d,%d\n",
-                             time, (int)(double(rv.x) * scale), (int)(double(rv.y) * scale),
-                             (int)(double(rv.z) * scale), (int)(double(gravity.x) * ascale),
-                             (int)(double(gravity.y) * ascale), (int)(double(gravity.z) * ascale));
-                wptr += size;
-            }
-            time++;
-
-            if (wptr - buf_text > 3200) {
-                HANDLE_FINALLY(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN),
-                               fclose(f));
-                wptr = buf_text;
-            }
-        }
-
-        have_bytes -= decoded_bytes;
-        ESP_LOGI(TAG, "%d block uncompressed, scale = %d", decoded_bytes, scale);
-
-        taskYIELD();
-        memmove(buf2, buf2 + decoded_bytes, have_bytes);
-    }
-    fclose(f);
-
-    if (wptr != buf_text) {
-        HANDLE_FINALLY(httpd_resp_send_chunk(req, buf_text, HTTPD_RESP_USE_STRLEN), ;);
-    }
+    close(fd);
 
     HANDLE_FINALLY(httpd_resp_send_chunk(req, NULL, 0), ;);
 
@@ -164,6 +83,7 @@ t,gx,gy,gz,ax,ay,ax
 
 static esp_err_t download_get_handler(httpd_req_t* req) {
     char buf[128];
+    char buf2[128];
     int buf_len = httpd_req_get_url_query_len(req) + 1;
     if (buf_len > 1 && httpd_req_get_url_query_str(req, buf, buf_len) == ESP_OK) {
         ESP_LOGI(TAG, "Found URL query => %s", buf);
@@ -175,12 +95,12 @@ static esp_err_t download_get_handler(httpd_req_t* req) {
         }
         if (httpd_query_key_value(buf, "name", param, sizeof(param)) == ESP_OK) {
             ESP_LOGI(TAG, "want to download %s", param);
-            snprintf(buf, sizeof(buf), "/spiflash/%s", param);
             if (raw_mode) {
+                snprintf(buf2, sizeof(buf2), "attachment;filename=%s", param);
+                httpd_resp_set_hdr(req, "content-disposition", buf2);
+                httpd_resp_set_hdr(req, "content-type", "application/octet-stream");
+                snprintf(buf, sizeof(buf), "/flash/%s", param);
                 return respond_with_file_raw(req, buf);
-            } else {
-                httpd_resp_set_hdr(req, "content-disposition", "attachment;filename=gyro.gcsv");
-                return respond_with_file(req, buf);
             }
         }
     }
@@ -223,8 +143,9 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
 
     entry("Avg gyro sample int. (ns)", std::to_string(gctx.logger_control.avg_sample_interval_ns));
 
-    auto free_space = get_free_space_kb();
-    entry("Free space (kBytes)", std::to_string(free_space.first));
+    int free_space{};
+    fs_free_space_kb(&free_space, nullptr);
+    entry("Free space (kBytes)", std::to_string(free_space));
 
     entry("Free heap size (kBytes)", std::to_string(esp_get_free_heap_size() / 1024));
 
@@ -256,12 +177,9 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
     std::string resp;
     resp.append("<table class=\"download_table\">");
     for (auto& f : file_list) {
-        resp.append(
-            R"--(<tr class="download_table_name_cell"><td><a href="#" onclick='download_and_decode_log("/download?name=)--");
+        resp.append(R"--(<tr class="download_table_name_cell"><td><a href="/download?name=)--");
         resp.append(f.first);
-        resp.append("&raw=1\", \"");
-        resp.append(f.first);
-        resp.append(".gcsv\");return false;'>");
+        resp.append("&raw=1\">");
         resp.append(f.first);
         resp.append(R"--(</a></td> <td class="download_table_mid_cell">)--");
         resp.append(std::to_string(f.second));
@@ -285,17 +203,7 @@ static esp_err_t root_get_handler(httpd_req_t* req) {
     HANDLE(httpd_resp_send_chunk(req, html_body, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, html_stylesheet, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, js_xhr_status_updater, HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_0, HTTPD_RESP_USE_STRLEN));
-    HANDLE(httpd_resp_send_chunk(
-        req, (gctx.settings_manager->GetString("imu_orientation") + "\",\n").c_str(),
-        HTTPD_RESP_USE_STRLEN));
-    std::string additional = gctx.settings_manager->GetString("gcsv_extra");
-    if (additional.size()) {
-        std::replace(additional.begin(), additional.end(), '|', '\n');
-        additional += ",\n";
-        HANDLE(httpd_resp_send_chunk(req, additional.c_str(), HTTPD_RESP_USE_STRLEN));
-    }
-    HANDLE(httpd_resp_send_chunk(req, js_wasm_decoder_1, HTTPD_RESP_USE_STRLEN));
+
     HANDLE(httpd_resp_send_chunk(req, html_suffix, HTTPD_RESP_USE_STRLEN));
     HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
@@ -483,7 +391,7 @@ static esp_err_t update_post_handler(httpd_req_t* req) {
     }
 
     gctx.terminate_for_update = true;
-    storage_fat_deinit();
+    fs_deinit();
 
     vTaskDelay(1000 / portTICK_PERIOD_MS);
 
@@ -583,8 +491,8 @@ static esp_err_t root_post_handler(httpd_req_t* req) {
     if (strncmp(content, "unlink=", 7) == 0) {
         content[recv_size] = 0;
         std::string path = content + 7;
-        if (unlink(("/spiflash/" + path).c_str())) {
-            ESP_LOGE(TAG, "Could not remove '%s'", ("/spiflash/" + path).c_str());
+        if (unlink(("/flash/" + path).c_str())) {
+            ESP_LOGE(TAG, "Could not remove '%s'", ("/flash/" + path).c_str());
             perror("???");
         }
     }
@@ -675,21 +583,21 @@ static esp_err_t display_get_handler(httpd_req_t* req) {
     return ESP_OK;
 }
 
-static const httpd_uri_t display_get = {
-    .uri = "/display", .method = HTTP_GET, .handler = display_get_handler, .user_ctx = NULL};
+// static const httpd_uri_t display_get = {
+//     .uri = "/display", .method = HTTP_GET, .handler = display_get_handler, .user_ctx = NULL};
 
-static esp_err_t display_data_get_handler(httpd_req_t* req) {
-    int size = oled_get_width() * oled_get_height() / 8 + 1;
-    uint8_t buf[size];
-    oled_capture(buf);
-    HANDLE(httpd_resp_send(req, (const char*)buf, size));
-    return ESP_OK;
-}
+// static esp_err_t display_data_get_handler(httpd_req_t* req) {
+//     int size = oled_get_width() * oled_get_height() / 8 + 1;
+//     uint8_t buf[size];
+//     oled_capture(buf);
+//     HANDLE(httpd_resp_send(req, (const char*)buf, size));
+//     return ESP_OK;
+// }
 
-static const httpd_uri_t display_data_get = {.uri = "/display_data",
-                                             .method = HTTP_GET,
-                                             .handler = display_data_get_handler,
-                                             .user_ctx = NULL};
+// static const httpd_uri_t display_data_get = {.uri = "/display_data",
+//                                              .method = HTTP_GET,
+//                                              .handler = display_data_get_handler,
+//                                              .user_ctx = NULL};
 
 static httpd_handle_t start_webserver(void) {
     httpd_handle_t server = NULL;
@@ -711,8 +619,8 @@ static httpd_handle_t start_webserver(void) {
         httpd_register_uri_handler(server, &settings_post);
         httpd_register_uri_handler(server, &calibration_post);
         httpd_register_uri_handler(server, &calibration_get);
-        httpd_register_uri_handler(server, &display_get);
-        httpd_register_uri_handler(server, &display_data_get);
+        // httpd_register_uri_handler(server, &display_get);
+        // httpd_register_uri_handler(server, &display_data_get);
         return server;
     }
 
@@ -727,10 +635,10 @@ static void background_scanner_task(void* param) {
         std::vector<std::pair<std::string, int>> new_file_list;
         DIR* dp;
         struct dirent* ep;
-        dp = opendir("/spiflash");
+        dp = opendir("/flash");
         if (dp != NULL) {
             while ((ep = readdir(dp))) {
-                static constexpr char templ[] = "/spiflash/%s";
+                static constexpr char templ[] = "/flash/%s";
                 char buf[30];
                 snprintf(buf, sizeof(buf), templ, ep->d_name);
                 struct stat st;
