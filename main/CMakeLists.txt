@@ -2,7 +2,6 @@ idf_component_register(
     SRCS 
         "esp-gyrologger.cpp" 
         "global_context.cpp"
-        "wifi/http.cpp" 
         "bus/mini_i2c.c" 
         "bus/aux_i2c.cpp" 
         "misc/misc.cpp" 

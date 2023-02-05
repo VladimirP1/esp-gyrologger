@@ -37,3 +37,5 @@ static inline void mini_i2c_disable_hw() {
 
 void periph_module_enable(periph_module_t periph);
 void periph_module_disable(periph_module_t periph);
+
+int esp_clk_xtal_freq(void);

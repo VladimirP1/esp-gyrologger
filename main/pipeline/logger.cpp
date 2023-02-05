@@ -10,6 +10,7 @@
 #include "hal/fs.hpp"
 
 #include <esp_log.h>
+#include <esp_timer.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
