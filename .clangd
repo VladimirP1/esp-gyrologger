@@ -1,0 +1,11 @@
+CompileFlags:
+  Add: [
+    -Wno-unknown-warning-option,
+    -ferror-limit=0,
+    -mlong-calls,
+    -I/opt/esp/idf/components/**,
+    -I/opt/esp/tools/riscv32-esp-elf/esp-2022r1-11.2.0/riscv32-esp-elf/riscv32-esp-elf/include/,
+    -I/opt/esp/tools/riscv32-esp-elf/esp-2022r1-11.2.0/riscv32-esp-elf/riscv32-esp-elf/include/c++/11.2.0/,
+    -I/opt/esp/tools/riscv32-esp-elf/esp-2022r1-11.2.0/riscv32-esp-elf/riscv32-esp-elf/include/c++/11.2.0/riscv32-esp-elf,
+  ]
+  Remove: [-mlongcalls, -fstrict-volatile-bitfields, -fno-tree-switch-conversion]
