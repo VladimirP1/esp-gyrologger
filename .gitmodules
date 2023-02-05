@@ -1,3 +1,3 @@
 [submodule "main/ebin-encoder-cpp"]
 	path = main/ebin-encoder-cpp
-	url = git@github.com:VladimirP1/ebin-encoder-cpp.git
+	url = ../ebin-encoder-cpp.git
