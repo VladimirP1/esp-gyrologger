@@ -1,9 +1,13 @@
 #include "server.hpp"
 
-#include "esp_system.h"
+
 #include "mongoose.h"
 
+#include "esp_system.h"
+
 #include "storage/filenames.hpp"
+
+#include <sys/unistd.h>
 
 static int s_debug_level = MG_LL_INFO;
 static const char *s_listening_address = "http://0.0.0.0:80";
@@ -11,9 +15,40 @@ static const char *s_listening_address = "http://0.0.0.0:80";
 #pragma GCC diagnostic push
 #pragma GCC diagnostic warning "-Wformat"
 
+static void proc_upload(struct mg_connection *c, struct mg_http_message *hm) {
+    int fd{};
+    if (c->data[0] == 'U') {
+        MG_INFO(("New chunk"));
+        memcpy(&fd, c->data + 1, 4);
+    } else if (c->data[0] == 0) {
+        fd = open("/flash/upload.bin", O_CREAT | O_TRUNC | O_WRONLY);
+        if (fd < 0) {
+            MG_INFO(("Failed to open file"));
+            mg_http_reply(c, 403, "Content-Type: text/plain\r\n", "Error");
+            return;
+        }
+        MG_INFO(("File opened"));
+        c->data[0] = 'U';
+        memcpy(c->data + 1, &fd, 4);
+    }
+    uint64_t time = esp_timer_get_time();
+    memcpy(c->data + 9, &time, 8);
+    if (hm->chunk.len != 0) {
+        write(fd, hm->chunk.ptr, hm->chunk.len);
+    }
+    if (hm->chunk.len == 0) {
+        c->data[0] = 0;
+        MG_INFO(("OK!"));
+        mg_http_reply(c, 200, "Content-Type: text/plain\r\n", "OK");
+        close(fd);
+    }
+}
+
 static void cb(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
     struct mg_mgr *mgr = (struct mg_mgr *)fn_data;
-    if (ev == MG_EV_HTTP_MSG) {
+    if (ev == MG_EV_OPEN) {
+        c->data[0] = 0;
+    } else if (ev == MG_EV_HTTP_MSG) {
         struct mg_http_message *hm = (mg_http_message *)ev_data;
         if (mg_http_match_uri(hm, "/download")) {
             char buf[64], buf2[64];
@@ -49,6 +84,12 @@ static void cb(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
         } else if (mg_http_match_uri(hm, "/status")) {
             mg_http_reply(c, 200, "Content-Type: text/plain\r\n", "free heap: %d\n",
                           esp_get_free_heap_size());
+        }
+    } else if (ev == MG_EV_HTTP_CHUNK) {
+        struct mg_http_message *hm = (mg_http_message *)ev_data;
+        if (mg_http_match_uri(hm, "/upload")) {
+            proc_upload(c, hm);
+            mg_http_delete_chunk(c, hm);
         }
     } else if (ev == MG_EV_WRITE) {
         if (c->data[0] == 'F') {
@@ -89,12 +130,12 @@ static void cb(struct mg_connection *c, int ev, void *ev_data, void *fn_data) {
     (void)fn_data;
 }
 
-void terminate_stalled_downloads(void *arg) {
+void terminate_stalled_transfers(void *arg) {
     struct mg_mgr *mgr = (struct mg_mgr *)arg;
 
     uint64_t cur_time = esp_timer_get_time();
     for (mg_connection *c = mgr->conns; c != NULL; c = c->next) {
-        if (c->data[0] == 'F') {
+        if (c->data[0] == 'F' || c->data[0] == 'U') {
             uint64_t time{};
             int fd{};
             memcpy(&fd, c->data + 1, 4);
@@ -115,7 +156,7 @@ void server_task(void *) {
 
     mg_log_set(s_debug_level);
     mg_mgr_init(&mgr);
-    mg_timer_add(&mgr, 500, MG_TIMER_REPEAT, terminate_stalled_downloads, &mgr);
+    mg_timer_add(&mgr, 500, MG_TIMER_REPEAT, terminate_stalled_transfers, &mgr);
     if ((c = mg_http_listen(&mgr, s_listening_address, cb, &mgr)) == NULL) {
         MG_ERROR(("Cannot listen on %s. Use http://ADDR:PORT or :PORT", s_listening_address));
         return;
