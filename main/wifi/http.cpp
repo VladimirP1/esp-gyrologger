@@ -7,6 +7,7 @@ extern "C" {
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_partition.h>
+#include <esp_timer.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
@@ -43,6 +44,9 @@ static const char* TAG = "http-server";
         y;                   \
         return ESP_FAIL;     \
     }
+
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-Wformat"
 
 static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
     char buf2[256];
@@ -762,3 +766,5 @@ void http_init() {
 
     server = start_webserver();
 }
+
+#pragma GCC diagnostic pop

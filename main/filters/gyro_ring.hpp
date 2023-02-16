@@ -11,6 +11,7 @@ extern "C" {
 #include <freertos/task.h>
 #include <freertos/semphr.h>
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <esp_check.h>
 #include <nvs_flash.h>
 #include <nvs.h>

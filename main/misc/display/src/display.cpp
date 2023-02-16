@@ -7,6 +7,7 @@ extern "C" {
 #include "rom/ets_sys.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include <esp_timer.h>
 }
 
 #include "bus/aux_i2c.hpp"

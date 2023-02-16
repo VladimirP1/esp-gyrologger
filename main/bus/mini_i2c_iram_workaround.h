@@ -22,6 +22,17 @@ static inline void mini_i2c_disable_hw() {
     DPORT_CLEAR_PERI_REG_MASK(SYSTEM_PERIP_CLK_EN0_REG, SYSTEM_I2C_EXT0_CLK_EN);
     DPORT_SET_PERI_REG_MASK(SYSTEM_PERIP_RST_EN0_REG, SYSTEM_I2C_EXT0_RST);
 }
+#elif CONFIG_IDF_TARGET_ESP32S2
+#include "soc/dport_reg.h"
+static inline void mini_i2c_enable_hw() {
+    DPORT_SET_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_I2C_EXT0_CLK_EN);
+    DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_I2C_EXT0_RST);
+}
+
+static inline void mini_i2c_disable_hw() {
+    DPORT_CLEAR_PERI_REG_MASK(DPORT_PERIP_CLK_EN_REG, DPORT_I2C_EXT0_CLK_EN);
+    DPORT_SET_PERI_REG_MASK(DPORT_PERIP_RST_EN_REG, DPORT_I2C_EXT0_RST);
+}
 #elif CONFIG_IDF_TARGET_ESP32
 #include "soc/dport_reg.h"
 static inline void mini_i2c_enable_hw() {

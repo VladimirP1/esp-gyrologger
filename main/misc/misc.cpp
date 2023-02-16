@@ -8,6 +8,7 @@ extern "C" {
 #include <hal/gpio_types.h>
 #include <driver/gpio.h>
 #include <driver/sigmadelta.h>
+#include <esp_timer.h>
 
 #include <driver/rmt.h>
 #include "led_strip/led_strip.h"
@@ -147,6 +148,10 @@ void button_task(void* params) {
     if (btn_gpio != 19 && btn_gpio != 18) {
         gpio_set_pull_mode(btn_gpio, GPIO_PULLUP_ONLY);
     }
+#elif CONFIG_IDF_TARGET_ESP32S2
+    if (btn_gpio != 19 && btn_gpio != 20) {
+        gpio_set_pull_mode(btn_gpio, GPIO_PULLUP_ONLY);
+    }
 #elif CONFIG_IDF_TARGET_ESP32
     gpio_set_pull_mode(btn_gpio, GPIO_PULLUP_ONLY);
 #endif
@@ -179,10 +184,10 @@ void button_task(void* params) {
                 vTaskDelay(10 / portTICK_PERIOD_MS);
             }
 
-            if (cnt > 4000) { // 40 seconds
+            if (cnt > 4000) {  // 40 seconds
                 cur_state = prev_state;
                 gctx.settings_manager->Reset();
-            } else if (cnt > 200) { // 2 seconds
+            } else if (cnt > 200) {  // 2 seconds
                 cur_state = prev_state;
                 gctx.settings_manager->Set(
                     "file_epoch", ((int)gctx.settings_manager->Get("file_epoch") + 1) % 676);

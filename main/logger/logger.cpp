@@ -11,6 +11,7 @@ extern "C" {
 #include <dirent.h>
 
 #include <esp_log.h>
+#include <esp_timer.h>
 #include <esp_console.h>
 #include <argtable3/argtable3.h>
 }
