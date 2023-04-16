@@ -30,7 +30,7 @@ static const char* TAG = "http-server";
 #include "http_strings.hpp"
 
 #ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
 #define HANDLE(x)        \
@@ -270,10 +270,15 @@ static esp_err_t files_get_handler(httpd_req_t* req) {
             R"--(<td><div style="color:black;display:inline-block;" class="delete_btn"  onclick="post_command('unlink=)--");
         resp.append(f.first);
         resp.append(R"--(')">&#x274c;</div></td></tr>)--");
+        if (resp.size() > 4096) {
+            HANDLE(httpd_resp_send_chunk(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
+            resp.clear();
+        }
     }
     resp.append("</table>");
     xSemaphoreGive(file_list_mtx);
-    HANDLE(httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
 }
 
