@@ -30,7 +30,7 @@ static const char* TAG = "http-server";
 #include "http_strings.hpp"
 
 #ifndef MIN
-#define MIN(a,b) ((a) < (b) ? (a) : (b))
+#define MIN(a, b) ((a) < (b) ? (a) : (b))
 #endif
 
 #define HANDLE(x)        \
@@ -248,32 +248,42 @@ static esp_err_t status_get_handler(httpd_req_t* req) {
 static const httpd_uri_t status_get = {
     .uri = "/status", .method = HTTP_GET, .handler = status_get_handler, .user_ctx = NULL};
 
-static SemaphoreHandle_t file_list_mtx;
-static std::vector<std::pair<std::string, int>> file_list;
-
 static esp_err_t files_get_handler(httpd_req_t* req) {
-    xSemaphoreTake(file_list_mtx, portMAX_DELAY);
     std::string resp;
     resp.append("<table class=\"download_table\">");
-    for (auto& f : file_list) {
-        resp.append(
-            R"--(<tr class="download_table_name_cell"><td><a href="#" onclick='download_and_decode_log("/download?name=)--");
-        resp.append(f.first);
-        resp.append("&raw=1\", \"");
-        resp.append(f.first);
-        resp.append(".gcsv\");return false;'>");
-        resp.append(f.first);
-        resp.append(R"--(</a></td> <td class="download_table_mid_cell">)--");
-        resp.append(std::to_string(f.second));
-        resp.append("KB</td>");
-        resp.append(
-            R"--(<td><div style="color:black;display:inline-block;" class="delete_btn"  onclick="post_command('unlink=)--");
-        resp.append(f.first);
-        resp.append(R"--(')">&#x274c;</div></td></tr>)--");
+    DIR* dp;
+    struct dirent* ep;
+    dp = opendir("/spiflash");
+    if (dp != NULL) {
+        while ((ep = readdir(dp))) {
+            static constexpr char templ[] = "/spiflash/%s";
+            char buf[30];
+            snprintf(buf, sizeof(buf), templ, ep->d_name);
+            resp.append(
+                R"--(<tr class="download_table_name_cell"><td><a href="#" onclick='download_and_decode_log("/download?name=)--");
+            resp.append(ep->d_name);
+            resp.append("&raw=1\", \"");
+            resp.append(ep->d_name);
+            resp.append(".gcsv\");return false;'>");
+            resp.append(ep->d_name);
+            resp.append(R"--(</a></td>)--");
+            resp.append(
+                R"--(<td><div style="color:black;display:inline-block;" class="delete_btn"  onclick="post_command('unlink=)--");
+            resp.append(ep->d_name);
+            resp.append(R"--(')">&#x274c;</div></td></tr>)--");
+            if (resp.size() > 4096) {
+                HANDLE(httpd_resp_send_chunk(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
+                resp.clear();
+            }
+        }
+        (void)closedir(dp);
+    } else {
+        ESP_LOGE(TAG, "Couldn't open the directory");
     }
+
     resp.append("</table>");
-    xSemaphoreGive(file_list_mtx);
-    HANDLE(httpd_resp_send(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, resp.c_str(), HTTPD_RESP_USE_STRLEN));
+    HANDLE(httpd_resp_send_chunk(req, NULL, 0));
     return ESP_OK;
 }
 
@@ -722,42 +732,7 @@ static httpd_handle_t start_webserver(void) {
 
 static esp_err_t stop_webserver(httpd_handle_t server) { return httpd_stop(server); }
 
-static void background_scanner_task(void* param) {
-    while (!gctx.terminate_for_update) {
-        std::vector<std::pair<std::string, int>> new_file_list;
-        DIR* dp;
-        struct dirent* ep;
-        dp = opendir("/spiflash");
-        if (dp != NULL) {
-            while ((ep = readdir(dp))) {
-                static constexpr char templ[] = "/spiflash/%s";
-                char buf[30];
-                snprintf(buf, sizeof(buf), templ, ep->d_name);
-                struct stat st;
-                if (stat(buf, &st) == 0) {
-                    int size_kb = st.st_size / 1024;
-                    new_file_list.push_back({ep->d_name, size_kb});
-                }
-            }
-            (void)closedir(dp);
-        } else {
-            ESP_LOGE(TAG, "Couldn't open the directory");
-        }
-        std::sort(new_file_list.begin(), new_file_list.end());
-        xSemaphoreTake(file_list_mtx, portMAX_DELAY);
-        file_list = std::move(new_file_list);
-        xSemaphoreGive(file_list_mtx);
-        vTaskDelay(1000 / portTICK_PERIOD_MS);
-    }
-    vTaskDelete(nullptr);
-}
-
 void http_init() {
-    file_list_mtx = xSemaphoreCreateMutex();
-
-    xTaskCreate(background_scanner_task, "background-scanner", 3084, nullptr,
-                configMAX_PRIORITIES - 10, nullptr);
-
     static httpd_handle_t server = NULL;
 
     server = start_webserver();

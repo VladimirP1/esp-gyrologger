@@ -209,50 +209,45 @@ const char js_xhr_status_updater[] = R"--(
             elem.style.backgroundColor ="black";
         }
     };
-    var update = function(path, element, interval, timeout, indicate) {
+    var update = function(path, onloaded, interval, timeout, indicate) {
         let controller = new AbortController();
         let restarted = false;
         function restart(t) {
             if (!restarted) {
                 restarted = true;
-                setTimeout(()=>{update(path, element, interval, timeout, indicate);}, t);
+                setTimeout(()=>{update(path, onloaded, interval, timeout, indicate);}, t);
             }
         }
         let to = setTimeout(()=>{ controller.abort(); }, timeout);
         fetch(path, {signal: controller.signal}).then((resp)=>{
             resp.text().then((text)=>{ 
                 clearTimeout(to); 
-                document.getElementById(element).innerHTML = text; 
+                onloaded(text);
                 indicate(); 
                 restart(interval); 
             }, (error) => { clearTimeout(to); restart(1000); });
         }, (error) => { clearTimeout(to); restart(1000); });
     };
-    function make_updater(path, element, interval, timeout, indicate) {
-        
-        var xhr = new XMLHttpRequest();
-        var do_request = function() {
-            xhr.open('GET', path);
-            xhr.timeout = timeout;
-            xhr.send();
-        }
-        xhr.onload = function() {
-            setTimeout(do_request, interval);
-            indicate();
-            document.getElementById(element).innerHTML = xhr.responseText;
-        };
-        xhr.onerror = function() {
-            setTimeout(do_request, 1000);
-        };
-        xhr.ontimeout = xhr.onerror;
-        do_request();
-    }
     var status_last_update = (new Date()).getTime();
     var files_last_update = (new Date()).getTime();
-    update( '/status', 'status_table', 500, 1000, ()=>{
+    update( '/status', function(text) {
+            document.getElementById('status_table').innerHTML = text;
+        }, 500, 1000, ()=>{
         indicate();
         status_last_update = (new Date()).getTime();});
-    update( '/files', 'files_table', 1000, 1000,  ()=>{
+    update( '/files',  function(text) {
+            let node = document.getElementById('files_table')
+            node.innerHTML = text;
+            let xnode = node.children[0].children[0];
+            [].slice
+                .call(xnode.children)
+                .sort(function(a, b) {
+                    return a.children[0].innerText.localeCompare(b.children[0].innerText);
+                })
+                .forEach(function(val, index) {
+                    xnode.appendChild(val);
+                });
+        }, 1000, 1000,  ()=>{
         indicate();
         files_last_update = (new Date()).getTime();});
 
