@@ -44,6 +44,9 @@ static const char* TAG = "http-server";
         return ESP_FAIL;     \
     }
 
+#pragma GCC diagnostic push
+#pragma GCC diagnostic warning "-Wformat"
+
 static esp_err_t respond_with_file_raw(httpd_req_t* req, const char* filename) {
     char buf2[256];
     int bytes_total = 0;
@@ -767,3 +770,5 @@ void http_init() {
 
     server = start_webserver();
 }
+
+#pragma GCC diagnostic pop

@@ -149,6 +149,10 @@ void button_task(void* params) {
     }
 #elif CONFIG_IDF_TARGET_ESP32
     gpio_set_pull_mode(btn_gpio, GPIO_PULLUP_ONLY);
+#elif CONFIG_IDF_TARGET_ESP32S3
+    if (btn_gpio != 19 && btn_gpio != 20) {
+        gpio_set_pull_mode(btn_gpio, GPIO_PULLUP_ONLY);
+    }
 #endif
 
     static constexpr int kDebounceThreshold = 6;

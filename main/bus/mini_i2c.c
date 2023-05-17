@@ -103,7 +103,7 @@ static esp_err_t IRAM_ATTR i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int
 }
 
 esp_err_t mini_i2c_set_timing(int freq) {
-#if CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
     i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_XTAL);
 #elif CONFIG_IDF_TARGET_ESP32
     i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_APB);

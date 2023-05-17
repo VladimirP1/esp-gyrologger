@@ -10,7 +10,7 @@ static void IRAM_ATTR mini_i2c_write_txfifo(i2c_hal_context_t* hal, uint8_t* ptr
     }
 }
 
-#if CONFIG_IDF_TARGET_ESP32C3
+#if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
 #include "soc/system_reg.h"
 #include "soc/dport_access.h"
 static inline void mini_i2c_enable_hw() {
