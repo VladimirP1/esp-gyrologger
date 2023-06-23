@@ -152,8 +152,8 @@ void momentary_ground_task(void* param) {
         return;
     }
 
-    bool invert = (bool) param;
-    
+    bool invert = (bool)param;
+
     gpio_reset_pin(trig_gpio);
     gpio_set_direction(trig_gpio, GPIO_MODE_INPUT);
 
@@ -217,6 +217,52 @@ void runcam_protocol_listen_task(void* param) {
     }
 }
 
+void lanc_listen_task(void* param) {
+    gpio_num_t rx_gpio = static_cast<gpio_num_t>(gctx.settings_manager->Get("trig_gpio_0"));
+
+    if (rx_gpio < 0) {
+        vTaskDelete(nullptr);
+        return;
+    }
+
+    gpio_reset_pin(rx_gpio);
+
+    uart_config_t uart_config = {
+        .baud_rate = 9600,
+        .data_bits = UART_DATA_8_BITS,
+        .parity = UART_PARITY_DISABLE,
+        .stop_bits = UART_STOP_BITS_1,
+        .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
+        .source_clk = UART_SCLK_APB,
+    };
+
+    static constexpr int kBufSize = 256;
+
+    ESP_ERROR_CHECK(uart_driver_install(0, kBufSize * 2, 0, 0, NULL, ESP_INTR_FLAG_IRAM));
+    ESP_ERROR_CHECK(uart_param_config(0, &uart_config));
+    ESP_ERROR_CHECK(
+        uart_set_pin(0, UART_PIN_NO_CHANGE, rx_gpio, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+
+    uint8_t buf[8];
+    int pos = 0;
+    int got_startstop {};
+    while (1) {
+        uart_read_bytes(0, buf + pos, 1, portMAX_DELAY);
+        if (buf[(pos - 1 + 8) % 8] == 0x18 && buf[(pos - 0 + 8) % 8] == 0x33) {
+            ESP_LOGI(TAG, "lanc: got start/stop command");
+            got_startstop = 10;
+        }
+        if (got_startstop) {
+            --got_startstop;
+            if (!got_startstop) {
+                ESP_LOGI(TAG, "lanc: do start/stop");
+                gctx.logger_control.active = !gctx.logger_control.active;
+            }
+        }
+        pos = (pos + 1) % 8;
+    }
+}
+
 void cam_control_task(void* param) {
     int type = gctx.settings_manager->Get("cam_ctrl_type");
     switch (type) {
@@ -238,6 +284,9 @@ void cam_control_task(void* param) {
         } break;
         case 5: {
             momentary_ground_task((void*)true);
+        } break;
+        case 6: {
+            lanc_listen_task((void*)true);
         } break;
     }
 }
