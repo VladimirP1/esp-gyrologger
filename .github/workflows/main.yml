@@ -65,6 +65,9 @@ jobs:
             /opt/esp/entrypoint.sh idf.py set-target esp32
             /usr/bin/cp sdkconfig.esp32 sdkconfig
             /usr/bin/sed -i 's/partitions.csv/partitions_16m.csv/g' sdkconfig
+            /usr/bin/sed -i 's/CONFIG_ESPTOOLPY_FLASHSIZE_4MB/CONFIG_ESPTOOLPY_FLASHSIZE_16MB/g' sdkconfig
+            /usr/bin/sed -i 's/CONFIG_ESPTOOLPY_FLASHSIZE="4MB"/CONFIG_ESPTOOLPY_FLASHSIZE="16MB"/g' sdkconfig
+
             /opt/esp/entrypoint.sh idf.py build
             /usr/bin/echo './esptool --port COM12 write_flash 0x1000 bootloader.bin  0x8000 partition-table.bin 0x10000 esp-gyrologger.bin' > readme.txt
             /usr/bin/mkdir esplog
