@@ -102,11 +102,14 @@ static esp_err_t IRAM_ATTR i2c_conf_pins(i2c_port_t i2c_num, int sda_io_num, int
     return ESP_OK;
 }
 
+int esp_clk_apb_freq(void);
+int esp_clk_xtal_freq(void);
+
 esp_err_t mini_i2c_set_timing(int freq) {
 #if CONFIG_IDF_TARGET_ESP32C3 || CONFIG_IDF_TARGET_ESP32S3
-    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_XTAL);
+    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_CLK_SRC_XTAL, esp_clk_xtal_freq());
 #elif CONFIG_IDF_TARGET_ESP32
-    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_SCLK_APB);
+    i2c_hal_set_bus_timing(&i2c_ctx.hal, freq, I2C_CLK_SRC_APB, esp_clk_apb_freq());
 #endif
     i2c_hal_update_config(&i2c_ctx.hal);
     return ESP_OK;
@@ -307,7 +310,8 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg_sync(uint8_t dev_adr, uint8_t reg_adr, ui
     return ESP_OK;
 }
 
-esp_err_t IRAM_ATTR mini_i2c_write_reg2_sync(uint8_t dev_adr, uint8_t reg_adr, uint8_t byte1, uint8_t byte2) {
+esp_err_t IRAM_ATTR mini_i2c_write_reg2_sync(uint8_t dev_adr, uint8_t reg_adr, uint8_t byte1,
+                                             uint8_t byte2) {
     if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
         return ESP_ERR_NOT_FINISHED;
     }
@@ -349,7 +353,7 @@ esp_err_t IRAM_ATTR mini_i2c_write_reg2_sync(uint8_t dev_adr, uint8_t reg_adr, u
     return ESP_OK;
 }
 
-esp_err_t IRAM_ATTR mini_i2c_write_n_sync(uint8_t * data, int len) {
+esp_err_t IRAM_ATTR mini_i2c_write_n_sync(uint8_t* data, int len) {
     if (!xSemaphoreTakeFromISR(i2c_ctx.mtx, NULL)) {
         return ESP_ERR_NOT_FINISHED;
     }

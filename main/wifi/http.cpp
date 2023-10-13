@@ -7,6 +7,7 @@ extern "C" {
 #include <esp_event.h>
 #include <esp_log.h>
 #include <esp_partition.h>
+#include <esp_timer.h>
 
 #include <sys/types.h>
 #include <sys/stat.h>
