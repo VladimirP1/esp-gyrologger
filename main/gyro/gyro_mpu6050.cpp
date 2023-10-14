@@ -90,8 +90,8 @@ static void IRAM_ATTR gyro_i2c_cb_mpu(void *arg) {
             acc[0] = (int16_t)((tmp_data[0] << 8) | tmp_data[1]);
             acc[1] = (int16_t)((tmp_data[2] << 8) | tmp_data[3]);
             acc[2] = (int16_t)((tmp_data[4] << 8) | tmp_data[5]);
-        } else if (mpu_imu_type == IMU_MPU6886) {
-            gyr[0] = (int16_t)((tmp_data[8] << 8) | tmp_data[9]);
+        } else { // IMU_MPU6886
+            gyr[0] = (int16_t)((tmp_data[8] << 8) | tmp_data[9]); 
             gyr[1] = (int16_t)((tmp_data[10] << 8) | tmp_data[11]);
             gyr[2] = (int16_t)((tmp_data[12] << 8) | tmp_data[13]);
             acc[0] = (int16_t)((tmp_data[0] << 8) | tmp_data[1]);
@@ -102,13 +102,14 @@ static void IRAM_ATTR gyro_i2c_cb_mpu(void *arg) {
                              acc[2], kFlagHaveAccel);
         prev_time = time;
     } else {
-        mini_i2c_hw_fsm_reset();
+        /* ignore */
     }
 
     proc_aux_i2c();
     mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
                                nullptr);
 }
+
 
 static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
     if (gctx.terminate_for_update) {
@@ -125,7 +126,7 @@ static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
                 ;
         }
     } else {
-        mini_i2c_hw_fsm_reset();
+        /* ignore */
     }
 
     if (fifo_bytes >= fifo_sample_size) {

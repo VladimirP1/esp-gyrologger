@@ -249,6 +249,7 @@ void display_setup() { display_mtx = xSemaphoreCreateMutex(); }
 void display_task(void *params) {
     int display_type = gctx.settings_manager->Get("display_type");
     switch (display_type) {
+        default:
         case 0:
             vTaskDelete(nullptr);
             break;

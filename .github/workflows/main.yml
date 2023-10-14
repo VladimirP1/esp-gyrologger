@@ -11,11 +11,12 @@ jobs:
       name: Build for esp32-c3
       runs-on: ubuntu-latest
       container:
-        image: espressif/idf:v5.0.4
+        image: espressif/idf:latest
       steps:
         - uses: actions/checkout@v3
         - name: Build
           run: |
+            /usr/bin/cp /opt/esp/idf/components/driver/i2c/i2c_private.h /opt/esp/idf/components/driver/i2c/include/driver/
             /opt/esp/entrypoint.sh idf.py build
             /usr/bin/echo './esptool --port COM12 write_flash 0x0 bootloader.bin  0x8000 partition-table.bin 0x10000 esp-gyrologger.bin' > readme.txt
             /usr/bin/mkdir esplog
@@ -32,11 +33,12 @@ jobs:
       name: Build for esp32
       runs-on: ubuntu-latest
       container:
-        image: espressif/idf:v5.0.4
+        image: espressif/idf:latest
       steps:
         - uses: actions/checkout@v3
         - name: Build
           run: |
+            /usr/bin/cp /opt/esp/idf/components/driver/i2c/i2c_private.h /opt/esp/idf/components/driver/i2c/include/driver/
             /usr/bin/cp sdkconfig.esp32 sdkconfig
             /opt/esp/entrypoint.sh idf.py set-target esp32
             /usr/bin/cp sdkconfig.esp32 sdkconfig
@@ -56,11 +58,12 @@ jobs:
       name: Build for esp32 (16M)
       runs-on: ubuntu-latest
       container:
-        image: espressif/idf:v5.0.4
+        image: espressif/idf:latest
       steps:
         - uses: actions/checkout@v3
         - name: Build
           run: |
+            /usr/bin/cp /opt/esp/idf/components/driver/i2c/i2c_private.h /opt/esp/idf/components/driver/i2c/include/driver/
             /usr/bin/cp sdkconfig.esp32 sdkconfig
             /opt/esp/entrypoint.sh idf.py set-target esp32
             /usr/bin/cp sdkconfig.esp32 sdkconfig
@@ -84,11 +87,12 @@ jobs:
       name: Build for esp32-s3
       runs-on: ubuntu-latest
       container:
-        image: espressif/idf:v5.0.4
+        image: espressif/idf:latest
       steps:
         - uses: actions/checkout@v3
         - name: Build
           run: |
+            /usr/bin/cp /opt/esp/idf/components/driver/i2c/i2c_private.h /opt/esp/idf/components/driver/i2c/include/driver/
             /usr/bin/cp sdkconfig.esp32s3 sdkconfig
             /opt/esp/entrypoint.sh idf.py set-target esp32s3
             /usr/bin/cp sdkconfig.esp32s3 sdkconfig

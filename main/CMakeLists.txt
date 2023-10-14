@@ -23,3 +23,5 @@ idf_component_register(
         "misc/battery.cpp"
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -std=gnu++17)

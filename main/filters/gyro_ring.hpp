@@ -34,7 +34,8 @@ struct raw_sample {
 
 struct sample {
     uint32_t duration_ns;
-    std::variant<raw_sample, quat::quat> sample;
+    bool is_quat{};
+    raw_sample raw;
 };
 
 struct acc_sample {
@@ -96,7 +97,7 @@ class Calibrator {
         }
     }
     void ProcessSample(sample &s) {
-        auto &rs = std::get<raw_sample>(s.sample);
+        auto &rs = s.raw;
         RunGyroCalibration(s);
         RunAccelCalibration(s);
 
@@ -137,7 +138,7 @@ class Calibrator {
             ESP_LOGI(kLogTag, "Gyro calibration complete %d %d %d", g_ofs_x, g_ofs_y, g_ofs_z);
             StoreCalibration();
         } else if (gyr_samples) {
-            auto &rs = std::get<raw_sample>(s.sample);
+            auto &rs = s.raw;
             sum_gx += rs.gx;
             sum_gy += rs.gy;
             sum_gz += rs.gz;
@@ -149,7 +150,7 @@ class Calibrator {
         static int64_t prev_accel_export_time = esp_timer_get_time();
         if (esp_timer_get_time() - prev_accel_export_time > 50000) {
             prev_accel_export_time = esp_timer_get_time();
-            auto &rs = std::get<raw_sample>(s.sample);
+            auto &rs = s.raw;
             quat::base_type ascale{kAccelToG / 16.0};
             quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
             static constexpr double lpf_k = 0.1;
@@ -222,7 +223,8 @@ class GyroRing {
         s.duration_ns = dur_smoother.Smooth(dur_ns);
         raw_sample rs = {
             .gx = gx, .gy = gy, .gz = gz, .ax = ax, .ay = ay, .az = az, .flags = flags};
-        s.sample = rs;
+        s.raw = rs;
+        s.is_quat = 0;
 
         shadow_wptr = (shadow_wptr + 1) % ring_.size();
 
@@ -249,7 +251,7 @@ class GyroRing {
         // Integrate gyro and LPF
         while (rptr_ != cached_wptr) {
             auto &s = ring_[rptr_];
-            auto &rs = std::get<raw_sample>(s.sample);
+            auto &rs = s.raw;
 
             calib_.ProcessSample(s);
 
@@ -326,7 +328,8 @@ class GyroRing {
 
             MaybeNormalize(quat_rptr_);
 
-            s.sample = quat_rptr_;
+            *((quat::quat*)&s.raw) = quat_rptr_;
+            s.is_quat = 1;
 
             rptr_ = (rptr_ + 1) % ring_.size();
         }
@@ -385,8 +388,8 @@ class GyroRing {
                 quat::base_type k2 = quat::base_type{static_cast<float>(interp_ts_ - sptr_ts_) /
                                                      ring_[next_sptr].duration_ns},
                                 k1 = quat::base_type{1} - k2;
-                quat::quat q = std::get<quat::quat>(ring_[sptr_].sample) * k1 +
-                               std::get<quat::quat>(ring_[next_sptr].sample) * k2;
+                quat::quat q = *((quat::quat*)&ring_[sptr_].raw) * k1 +
+                               *((quat::quat*)&ring_[next_sptr].raw) * k2;
 
                 int cached_sptr = (sptr_ + 1) % ring_.size();
                 int cached_sptr_ts = sptr_ts_ + ring_[cached_sptr].duration_ns;

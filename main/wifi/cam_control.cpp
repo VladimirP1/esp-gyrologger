@@ -192,15 +192,15 @@ void runcam_protocol_listen_task(void* param) {
 
     static constexpr int kBufSize = 256;
 
-    ESP_ERROR_CHECK(uart_driver_install(0, kBufSize * 2, 0, 0, NULL, 0));
-    ESP_ERROR_CHECK(uart_param_config(0, &uart_config));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, kBufSize * 2, 0, 0, NULL, 0));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
     ESP_ERROR_CHECK(
-        uart_set_pin(0, UART_PIN_NO_CHANGE, rx_gpio, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+        uart_set_pin(UART_NUM_1, UART_PIN_NO_CHANGE, rx_gpio, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     uint8_t buf[4];
     int pos = 0;
     while (1) {
-        uart_read_bytes(0, buf + pos, 1, portMAX_DELAY);
+        uart_read_bytes(UART_NUM_1, buf + pos, 1, portMAX_DELAY);
         if (buf[(pos - 3 + 4) % 4] == 0xcc && buf[(pos - 2 + 4) % 4] == 0x01) {
             if (buf[(pos - 1 + 4) % 4] == 0x01 && buf[pos] == 0xe7) {
                 ESP_LOGI(TAG, "runcam protocol: simulate power btn");
@@ -238,16 +238,16 @@ void lanc_listen_task(void* param) {
 
     static constexpr int kBufSize = 256;
 
-    ESP_ERROR_CHECK(uart_driver_install(0, kBufSize * 2, 0, 0, NULL, ESP_INTR_FLAG_IRAM));
-    ESP_ERROR_CHECK(uart_param_config(0, &uart_config));
+    ESP_ERROR_CHECK(uart_driver_install(UART_NUM_1, kBufSize * 2, 0, 0, NULL, ESP_INTR_FLAG_IRAM));
+    ESP_ERROR_CHECK(uart_param_config(UART_NUM_1, &uart_config));
     ESP_ERROR_CHECK(
-        uart_set_pin(0, UART_PIN_NO_CHANGE, rx_gpio, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
+        uart_set_pin(UART_NUM_1, UART_PIN_NO_CHANGE, rx_gpio, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
 
     uint8_t buf[8];
     int pos = 0;
     int got_startstop {};
     while (1) {
-        uart_read_bytes(0, buf + pos, 1, portMAX_DELAY);
+        uart_read_bytes(UART_NUM_1, buf + pos, 1, portMAX_DELAY);
         if (buf[(pos - 1 + 8) % 8] == 0x18 && buf[(pos - 0 + 8) % 8] == 0x33) {
             ESP_LOGI(TAG, "lanc: got start/stop command");
             got_startstop = 10;

@@ -124,7 +124,7 @@ static void IRAM_ATTR gyro_i2c_cb(void* args) {
             bytes_to_read = 1;
         }
     } else {
-        mini_i2c_hw_fsm_reset();
+        /* ignore */
     }
     if (have_gyro) {
         gctx.gyro_ring->Push((time - prev_gyro_time) * 1000, gyro[0], gyro[1], gyro[2], accel[0],

@@ -13,6 +13,8 @@ extern "C" {
 #include <initializer_list>
 
 void gyro_probe_and_start_task() {
+    ESP_LOGI("gyro-prober", "Prepare to probe");
+
     struct probe_entry {
         uint8_t i2c_addr;
         bool (*probe_ptr)(uint8_t);
