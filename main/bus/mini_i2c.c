@@ -9,6 +9,7 @@
 #include <freertos/semphr.h>
 #include <stdio.h>
 #include "driver/i2c_private.h"
+#include "hal/clk_gate_ll.h"
 
 #define TAG "i2c"
 
@@ -328,7 +329,31 @@ esp_err_t IRAM_ATTR mini_i2c_write_n_sync(uint8_t* data, int len) {
 
 /* Not IRAM-safe */
 
-static esp_err_t mini_i2c_master_clear_bus(i2c_bus_handle_t handle) {
+static esp_err_t IRAM_ATTR mini_i2c_common_set_pins(i2c_bus_handle_t handle)
+{
+    esp_err_t ret = ESP_OK;
+    int port_id = handle->port_num;
+
+    gpio_set_intr_type(handle->sda_num, GPIO_INTR_DISABLE);
+    gpio_set_direction(handle->sda_num, GPIO_MODE_INPUT_OUTPUT_OD);
+    gpio_set_pull_mode(handle->sda_num,  GPIO_PULLUP_ONLY);
+    gpio_set_level(handle->sda_num, 1);
+    gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[handle->sda_num], PIN_FUNC_GPIO);
+    esp_rom_gpio_connect_out_signal(handle->sda_num, i2c_periph_signal[port_id].sda_out_sig, 0, 0);
+    esp_rom_gpio_connect_in_signal(handle->sda_num, i2c_periph_signal[port_id].sda_in_sig, 0);
+
+
+    gpio_set_intr_type(handle->scl_num, GPIO_INTR_DISABLE);
+    gpio_set_direction(handle->scl_num, GPIO_MODE_INPUT_OUTPUT_OD);
+    gpio_set_pull_mode(handle->scl_num,  GPIO_PULLUP_ONLY);
+    gpio_set_level(handle->scl_num, 1);
+    gpio_hal_iomux_func_sel(GPIO_PIN_MUX_REG[handle->scl_num], PIN_FUNC_GPIO);
+    esp_rom_gpio_connect_out_signal(handle->scl_num, i2c_periph_signal[port_id].scl_out_sig, 0, 0);
+    esp_rom_gpio_connect_in_signal(handle->scl_num, i2c_periph_signal[port_id].scl_in_sig, 0);
+    return ret;
+}
+
+static esp_err_t IRAM_ATTR mini_i2c_master_clear_bus(i2c_bus_handle_t handle) {
 #if !SOC_I2C_SUPPORT_HW_FSM_RST
     const int scl_half_period = 5;  // use standard 100kHz data rate
     int i = 0;
@@ -353,7 +378,7 @@ static esp_err_t mini_i2c_master_clear_bus(i2c_bus_handle_t handle) {
     gpio_set_level(handle->scl_num, 1);
     esp_rom_delay_us(scl_half_period);
     gpio_set_level(handle->sda_num, 1);  // STOP, SDA low -> high while SCL is HIGH
-    i2c_common_set_pins(handle);
+    mini_i2c_common_set_pins(handle);
 #else
     i2c_hal_context_t* hal = &handle->hal;
     i2c_ll_master_clr_bus(hal->dev, I2C_LL_RESET_SLV_SCL_PULSE_NUM_DEFAULT);
@@ -361,31 +386,33 @@ static esp_err_t mini_i2c_master_clear_bus(i2c_bus_handle_t handle) {
     return ESP_OK;
 }
 
-extern void periph_module_enable(periph_module_t periph);
-
-extern void periph_module_disable(periph_module_t periph);
-
-esp_err_t mini_i2c_hw_fsm_reset() {
+esp_err_t IRAM_ATTR mini_i2c_hw_fsm_reset() {
     i2c_bus_handle_t handle = i2c_ctx.handle;
     i2c_hal_context_t* hal = &handle->hal;
     i2c_hal_timing_config_t timing_config;
     uint8_t filter_cfg;
 
-    esp_intr_disable(handle->intr_handle);
-    i2c_hal_get_timing_config(hal, &timing_config);
+    i2c_ll_get_scl_clk_timing(hal->dev, &timing_config.high_period, &timing_config.low_period, &timing_config.wait_high_period);
+    i2c_ll_get_start_timing(hal->dev, &timing_config.rstart_setup, &timing_config.start_hold);
+    i2c_ll_get_stop_timing(hal->dev, &timing_config.stop_setup, &timing_config.stop_hold);
+    i2c_ll_get_sda_timing(hal->dev, &timing_config.sda_sample, &timing_config.sda_hold);
+    i2c_ll_get_tout(hal->dev, &timing_config.timeout);
     i2c_ll_master_get_filter(hal->dev, &filter_cfg);
 
     // to reset the I2C hw module, we need re-enable the hw
     mini_i2c_master_clear_bus(handle);
-    periph_module_disable(i2c_periph_signal[handle->port_num].module);
-    periph_module_enable(i2c_periph_signal[handle->port_num].module);
+    periph_ll_disable_clk_set_rst(i2c_periph_signal[handle->port_num].module);
+    periph_ll_enable_clk_clear_rst(i2c_periph_signal[handle->port_num].module);
 
     i2c_hal_master_init(hal);
     i2c_ll_disable_intr_mask(hal->dev, I2C_LL_INTR_MASK);
     i2c_ll_clear_intr_mask(hal->dev, I2C_LL_INTR_MASK);
-    i2c_hal_set_timing_config(hal, &timing_config);
+    i2c_ll_set_scl_clk_timing(hal->dev, timing_config.high_period, timing_config.low_period, timing_config.wait_high_period);
+    i2c_ll_master_set_start_timing(hal->dev, timing_config.rstart_setup, timing_config.start_hold);
+    i2c_ll_master_set_stop_timing(hal->dev, timing_config.stop_setup, timing_config.stop_hold);
+    i2c_ll_set_sda_timing(hal->dev, timing_config.sda_sample, timing_config.sda_hold);
+    i2c_ll_set_tout(hal->dev, timing_config.timeout);
     i2c_ll_master_set_filter(hal->dev, filter_cfg);
-    esp_intr_enable(handle->intr_handle);
     return ESP_OK;
 }
 
@@ -415,6 +442,8 @@ esp_err_t mini_i2c_init(int sda_pin, int scl_pin, int freq) {
     /* setup i2c peripheral */
     handle->sda_num = sda_pin;
     handle->scl_num = scl_pin;
+    handle->pull_up_enable = 1;
+
     i2c_hal_context_t* hal = &handle->hal;
     ESP_ERROR_CHECK(i2c_common_set_pins(handle));
     ESP_ERROR_CHECK(i2c_select_periph_clock(handle, I2C_CLK_SRC_DEFAULT));

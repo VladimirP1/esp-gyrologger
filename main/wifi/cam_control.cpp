@@ -45,7 +45,7 @@ static bool make_tcp_conn(char* host, int port, int* sock_ret) {
 
     ESP_LOGI(TAG, "Socket created, connecting to %s:%d", host, port);
 
-    int err = connect(sock, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr_in6));
+    int err = connect(sock, (struct sockaddr*)&dest_addr, sizeof(struct sockaddr_in));
     if (err != 0 && errno != EINPROGRESS) {
         ESP_LOGE(TAG, "Socket unable to connect: errno %d", errno);
         close(sock);

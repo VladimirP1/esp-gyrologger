@@ -102,7 +102,7 @@ static void IRAM_ATTR gyro_i2c_cb_mpu(void *arg) {
                              acc[2], kFlagHaveAccel);
         prev_time = time;
     } else {
-        /* ignore */
+        mini_i2c_hw_fsm_reset();
     }
 
     proc_aux_i2c();
@@ -126,7 +126,7 @@ static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
                 ;
         }
     } else {
-        /* ignore */
+        mini_i2c_hw_fsm_reset();
     }
 
     if (fifo_bytes >= fifo_sample_size) {
