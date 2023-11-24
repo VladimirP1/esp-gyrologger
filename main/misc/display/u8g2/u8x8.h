@@ -94,7 +94,7 @@
 #endif
 
 /* Define this for an additional user pointer inside the u8x8 data struct */
-//#define U8X8_WITH_USER_PTR
+#define U8X8_WITH_USER_PTR
 
 
 /* Undefine this to remove u8x8_SetFlipMode function */

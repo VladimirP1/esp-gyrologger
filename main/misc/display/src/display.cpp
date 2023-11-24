@@ -7,6 +7,7 @@ extern "C" {
 #include "rom/ets_sys.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "tft/u8g2_esplcd.h"
 }
 
 #include "bus/aux_i2c.hpp"
@@ -127,7 +128,7 @@ void work_64x32() {
             snprintf(buf, 32, "%02d:%02d %.1fM%c", total_time_s / 60, total_time_s % 60,
                      df_info.first / 1e3, gctx.wifi_active ? '!' : ' ');
         } else {
-             snprintf(buf, 32, "%02d:%02d %.1fG%c", total_time_s / 60, total_time_s % 60,
+            snprintf(buf, 32, "%02d:%02d %.1fG%c", total_time_s / 60, total_time_s % 60,
                      df_info.first / 1e6, gctx.wifi_active ? '!' : ' ');
         }
 
@@ -211,6 +212,136 @@ void work_64x32() {
     }
 }
 
+void work_128x128() {
+    u8g2_ClearBuffer(&u8g2);
+    u8g2_DrawXBM(&u8g2, 0, 3, 64, 26, logo_64_26);
+    u8g2_SendBuffer(&u8g2);
+    vTaskDelay(4000 / portTICK_PERIOD_MS);
+
+    auto check_log_start = []() {
+        // static bool prev_busy{};
+        // if (prev_busy != gctx.logger_control.busy) {
+        //     u8g2_
+        //     vTaskDelay(200 / portTICK_PERIOD_MS);
+        //     u8g2_SendF(&u8g2, "c", 0xa6);
+        //     prev_busy = gctx.logger_control.busy;
+        // }
+    };
+
+    int offset = 0;
+
+    auto redraw = [offset]() {
+        xSemaphoreTake(display_mtx, portMAX_DELAY);
+        u8g2_ClearBuffer(&u8g2);
+
+        static int total_time_s{};
+        static std::string fname{"-IDLE--"};
+        if (xSemaphoreTake(gctx.logger_control.mutex, portMAX_DELAY)) {
+            if (gctx.logger_control.busy && gctx.logger_control.file_name) {
+                total_time_s = (uint64_t)gctx.logger_control.total_samples_written *
+                               (uint64_t)gctx.gyro_ring->GetInterval() / 1000000ULL;
+                fname = std::string(gctx.logger_control.file_name).substr(10);
+                fname = fname.substr(1, 7);
+            }
+            xSemaphoreGive(gctx.logger_control.mutex);
+        }
+
+        u8g2_SetFont(&u8g2, u8g2_font_inr21_mf);
+        u8g2_SetFontRefHeightText(&u8g2);
+        u8g2_SetFontPosBottom(&u8g2);
+        u8g2_DrawStr(&u8g2, 0, 34 + offset, fname.c_str());
+
+        auto df_info = get_free_space_kb();
+        char buf[32];
+
+        snprintf(buf, 32, "%02d:%02d", total_time_s / 60, total_time_s % 60);
+
+        u8g2_SetFont(&u8g2, u8g2_font_inr16_mf);
+        u8g2_SetFontRefHeightText(&u8g2);
+        u8g2_SetFontPosBottom(&u8g2);
+        u8g2_DrawStr(&u8g2, 0, 34 + 5 + 26, buf);
+
+        if (df_info.first < 10000) {
+            snprintf(buf, 32, "%.1fM%c", df_info.first / 1e3, gctx.wifi_active ? '!' : ' ');
+        } else {
+            snprintf(buf, 32, "%.1fG%c", df_info.first / 1e6, gctx.wifi_active ? '!' : ' ');
+        }
+
+        u8g2_SetFont(&u8g2, u8g2_font_inr16_mf);
+        u8g2_SetFontRefHeightText(&u8g2);
+        u8g2_SetFontPosBottom(&u8g2);
+        u8g2_DrawStr(&u8g2, 0, 34 + 5 + 26 + 2 + 26, buf);
+        xSemaphoreGive(display_mtx);
+    };
+
+    auto redraw_gyro = []() {
+        xSemaphoreTake(gctx.logger_control.accel_raw_mtx, portMAX_DELAY);
+        int gx = gctx.logger_control.gyro_raw[0] * 10;
+        int gy = gctx.logger_control.gyro_raw[1] * 10;
+        int gz = gctx.logger_control.gyro_raw[2] * 10;
+
+        int ax = gctx.logger_control.accel_raw[0] * 8;
+        int ay = gctx.logger_control.accel_raw[1] * 8;
+        int az = gctx.logger_control.accel_raw[2] * 8;
+        xSemaphoreGive(gctx.logger_control.accel_raw_mtx);
+
+        xSemaphoreTake(display_mtx, portMAX_DELAY);
+
+        if (gctx.logger_control.busy) {
+            static int pos = 0;
+            for (int i = 0; i <= 128; i += 32) {
+                u8g2_DrawBox(&u8g2, (pos + i) % (128 + 32) - 16, 34 + 3, 16, 3);
+            }
+            pos += 8;
+        }
+
+        auto draw_gauge = []() {
+
+        };
+
+        // u8g2_DrawLine(&u8g2, 10, 28, std::min(std::max(10 + gx, 0), 20), 28);
+        // u8g2_DrawLine(&u8g2, 10, 28, 10, 31);
+
+        // u8g2_DrawLine(&u8g2, 30, 28, std::min(std::max(30 + gy, 20), 40), 28);
+        // u8g2_DrawLine(&u8g2, 30, 28, 30, 31);
+
+        // u8g2_DrawLine(&u8g2, 50, 28, std::min(std::max(50 + gz, 40), 60), 28);
+        // u8g2_DrawLine(&u8g2, 50, 28, 50, 31);
+
+        // u8g2_DrawLine(&u8g2, 10, 30, std::min(std::max(10 + ax, 0), 20), 30);
+        // u8g2_DrawLine(&u8g2, 10, 30, 10, 31);
+
+        // u8g2_DrawLine(&u8g2, 30, 30, std::min(std::max(30 + ay, 20), 40), 30);
+        // u8g2_DrawLine(&u8g2, 30, 30, 30, 31);
+
+        // u8g2_DrawLine(&u8g2, 50, 30, std::min(std::max(50 + az, 40), 60), 30);
+        // u8g2_DrawLine(&u8g2, 50, 30, 50, 31);
+        xSemaphoreGive(display_mtx);
+    };
+
+    uint8_t width_tiles = u8g2_GetBufferTileWidth(&u8g2);
+    uint8_t height_tiles = u8g2_GetBufferTileHeight(&u8g2);
+
+    auto last_redraw = esp_timer_get_time();
+    auto last_full_redraw = esp_timer_get_time();
+
+    while (1) {
+        // while (esp_timer_get_time() - last_redraw < 50000) {
+        vTaskDelay(25 / portTICK_PERIOD_MS);
+        // }
+        check_log_start();
+        redraw();
+        redraw_gyro();
+    
+        // u8g2_SetDrawColor(&u8g2, 2);
+        // u8g2_DrawLine(&u8g2, 0, 0, 127, 127);
+        // u8g2_DrawLine(&u8g2, 0, 127, 127, 0);
+        // u8g2_SetDrawColor(&u8g2, 1);
+        u8g2_SendBuffer(&u8g2);
+        last_redraw = esp_timer_get_time();
+    }
+}
+
 void oled_capture(uint8_t *out) {
     if (!display_on) return;
     xSemaphoreTake(display_mtx, portMAX_DELAY);
@@ -269,6 +400,45 @@ void display_task(void *params) {
             u8g2_SetPowerSave(&u8g2, 0);
             display_on = true;
             work_64x32();
+            break;
+        case 3:  // m5stickc plus
+            const uint8_t axp192_init_seq[][3] = {
+                {0x68, 0x28, 0xcc},
+                // Set ADC to All Enable
+                {0x68, 0x82, 0xff},
+                // Bat charge voltage to 4.2, Current 100MA
+                {0x68, 0x33, 0xc0},
+                // Enable Bat,ACIN,VBUS,APS adc
+                {0x68, 0x82, 0xff},
+                // Enable Ext, LDO2, LDO3, DCDC1
+                {0x68, 0x12, 0x4D},
+                // 128ms power on, 4s power off
+                {0x68, 0x36, 0x0C},
+                // Set RTC voltage to 3.3V
+                {0x68, 0x91, 0xF0},
+                // Set GPIO0 to LDO
+                {0x68, 0x90, 0x02},
+                // Disable vbus hold limit
+                {0x68, 0x30, 0x80},
+                // Set temperature protection
+                {0x68, 0x39, 0xfc},
+                // Enable RTC BAT charge
+                {0x68, 0x35, 0xa2},
+                // Enable bat detection
+                {0x68, 0x32, 0x46},
+            };
+            for (int i = 0; i < 12; ++i) {
+                static aux_i2c_msg_t msg;
+                memcpy(msg.buf, axp192_init_seq[i], 3);
+                msg.len = 3;
+                aux_i2c_send_blocking(&msg);
+            }
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            u8g2_esplcd_t lcd;
+            lcd.u8g2 = &u8g2;
+            esplcd_init(&lcd, 15, 13, 5, 23, 18, -1, init_panel_st7789_m5stickc_plus);
+            display_on = true;
+            work_128x128();
             break;
     }
 }

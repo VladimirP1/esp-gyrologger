@@ -20,6 +20,9 @@ idf_component_register(
         "wifi/cam_control.cpp" 
         "misc/led_strip/led_strip.c"
         "misc/display/src/display.cpp"
+        "misc/display/src/tft/u8g2_esplcd.c"
         "misc/battery.cpp"
     INCLUDE_DIRS "."
     LDFRAGMENTS "linker.lf")
+
+target_compile_options(${COMPONENT_LIB} PRIVATE -std=gnu++17)

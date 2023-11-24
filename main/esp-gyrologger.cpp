@@ -92,7 +92,7 @@ void app_main_cpp(void) {
     }
     xTaskCreate(button_task, "button-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
     xTaskCreate(cam_control_task, "cam-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
-    xTaskCreate(display_task, "display-task", 4096, NULL, configMAX_PRIORITIES - 4, NULL);
+    xTaskCreate(display_task, "display-task", 8192, NULL, configMAX_PRIORITIES - 4, NULL);
 
     http_init();
 }
