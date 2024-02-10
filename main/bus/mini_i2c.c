@@ -325,7 +325,13 @@ esp_err_t IRAM_ATTR mini_i2c_read_reg_sync(struct i2c_ctx *ctx, uint8_t dev_adr,
     // ESP_LOGI(TAG, "txfifo_cnt: %d", (unsigned int)dev->sr.tx_fifo_cnt);
     // ESP_LOGI(TAG, "rxfifo_cnt: %d", (unsigned int)dev->sr.rx_fifo_cnt);
 
-    if (!cnt || dev->sr.rx_fifo_cnt != n_bytes) {
+    #if defined(CONFIG_IDF_TARGET_ESP32C3)
+    int act_n_bytes = dev->sr.rx_fifo_cnt;
+    #elif defined(CONFIG_IDF_TARGET_ESP32S3)
+    int act_n_bytes = dev->sr.rxfifo_cnt;
+    #endif
+    
+    if (!cnt || act_n_bytes != n_bytes) {
         xSemaphoreGiveFromISR(ctx->mtx, NULL);
         return ESP_FAIL;
     }

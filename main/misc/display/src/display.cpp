@@ -7,6 +7,11 @@ extern "C" {
 #include "rom/ets_sys.h"
 #include "esp_log.h"
 #include "esp_wifi.h"
+#include "driver/gpio.h"
+#include "esp_lcd_panel_io.h"
+#include "esp_lcd_panel_st7789.h"
+#include "esp_lcd_panel_ops.h"
+#include "driver/spi_master.h"
 }
 
 #include "bus/aux_i2c.hpp"
@@ -127,7 +132,7 @@ void work_64x32() {
             snprintf(buf, 32, "%02d:%02d %.1fM%c", total_time_s / 60, total_time_s % 60,
                      df_info.first / 1e3, gctx.wifi_active ? '!' : ' ');
         } else {
-             snprintf(buf, 32, "%02d:%02d %.1fG%c", total_time_s / 60, total_time_s % 60,
+            snprintf(buf, 32, "%02d:%02d %.1fG%c", total_time_s / 60, total_time_s % 60,
                      df_info.first / 1e6, gctx.wifi_active ? '!' : ' ');
         }
 
@@ -211,6 +216,115 @@ void work_64x32() {
     }
 }
 
+void work_atoms3() {
+    spi_device_handle_t spi_device_;
+    esp_lcd_panel_io_handle_t panel_io_;
+    esp_lcd_panel_handle_t panel_;
+
+    gpio_num_t gpio_dc = GPIO_NUM_33;
+    gpio_num_t gpio_rst = GPIO_NUM_34;
+    gpio_num_t gpio_bl = GPIO_NUM_16;
+    gpio_num_t gpio_mosi = GPIO_NUM_21;
+    gpio_num_t gpio_sclk = GPIO_NUM_17;
+    gpio_num_t gpio_cs = GPIO_NUM_15;
+    gpio_num_t gpios[] = {gpio_dc, gpio_rst, gpio_bl};
+    for (int i = 0; i < sizeof(gpios) / sizeof(gpios[0]); ++i) {
+        if (gpios[i] >= 0) {
+            gpio_reset_pin(gpios[i]);
+            gpio_set_direction(gpios[i], GPIO_MODE_OUTPUT);
+            gpio_set_level(gpios[i], 0);
+        }
+    }
+    if (gpio_rst >= 0) {
+        vTaskDelay(100 / portTICK_PERIOD_MS);
+        gpio_set_level(gpio_rst, 1);
+    }
+
+    // draw_sema = xSemaphoreCreateCounting(2, 2);
+
+    spi_bus_config_t buscfg = {.mosi_io_num = gpio_mosi,
+                               .miso_io_num = -1,
+                               .sclk_io_num = gpio_sclk,
+                               .quadwp_io_num = -1,
+                               .quadhd_io_num = -1,
+                               .max_transfer_sz = 0,
+                               .flags = 0};
+
+    ESP_ERROR_CHECK(spi_bus_initialize(SPI2_HOST, &buscfg, SPI_DMA_CH_AUTO));
+
+    spi_device_interface_config_t devcfg;
+    memset(&devcfg, 0, sizeof(devcfg));
+    devcfg.clock_speed_hz = SPI_MASTER_FREQ_10M;
+    devcfg.queue_size = 7;
+    devcfg.mode = 3;
+    devcfg.flags = SPI_DEVICE_NO_DUMMY;
+    devcfg.spics_io_num = gpio_cs;
+    ESP_ERROR_CHECK(spi_bus_add_device(SPI2_HOST, &devcfg, &spi_device_));
+
+    esp_lcd_panel_io_spi_config_t io_config = {.cs_gpio_num = gpio_cs,
+                                               .dc_gpio_num = gpio_dc,
+                                               .spi_mode = 0,
+                                               .pclk_hz = 20000000,
+                                               .trans_queue_depth = 4,
+                                               .lcd_cmd_bits = 8,
+                                               .lcd_param_bits = 8};
+    // Attach the LCD to the SPI bus
+    ESP_ERROR_CHECK(
+        esp_lcd_new_panel_io_spi((esp_lcd_spi_bus_handle_t)SPI2_HOST, &io_config, &panel_io_));
+
+    esp_lcd_panel_dev_config_t panel_config = {
+        .reset_gpio_num = gpio_rst,
+        .rgb_ele_order = LCD_RGB_ELEMENT_ORDER_RGB,
+        .bits_per_pixel = 16,
+    };
+    ESP_ERROR_CHECK(esp_lcd_new_panel_st7789(panel_io_, &panel_config, &panel_));
+    ESP_ERROR_CHECK(esp_lcd_panel_reset(panel_));
+    ESP_ERROR_CHECK(esp_lcd_panel_init(panel_));
+    ESP_ERROR_CHECK(esp_lcd_panel_mirror(panel_, false, false));
+    ESP_ERROR_CHECK(esp_lcd_panel_swap_xy(panel_, true));
+    ESP_ERROR_CHECK(esp_lcd_panel_set_gap(panel_, 1, 2));
+    ESP_ERROR_CHECK(esp_lcd_panel_invert_color(panel_, true));
+    ESP_ERROR_CHECK(esp_lcd_panel_disp_on_off(panel_, true));
+
+    gpio_set_level(gpio_bl, 1);
+
+    auto fill_display = [&](uint8_t r, uint8_t g, uint8_t b) {
+        static uint8_t data[2 * 128 * 16] = {};
+        for (int i = 0; i < 128 * 16; ++i) {
+            data[2 * i + 0] = (b & 0x1f << 6) | ((g >> 3) & 0x7);
+            data[2 * i + 1] = ((g & 0x7) << 5) | (r & 0x1f);
+        }
+        for (int k = 0; k < 128; k += 16) {
+            esp_lcd_panel_draw_bitmap(panel_, 0, k, 128, k + 16, data);
+        }
+    };
+
+    uint32_t duty{};
+    while (true) {
+        if (gctx.logger_control.busy &&
+            (esp_timer_get_time() - gctx.logger_control.last_block_time_us <= 2000000ULL) &&
+            !gctx.logger_control.storage_failure) {
+            fill_display(255, 0, 0);
+            gpio_set_level(gpio_bl, 1);
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            gpio_set_level(gpio_bl, 0);
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            gpio_set_level(gpio_bl, 1);
+            vTaskDelay(100 / portTICK_PERIOD_MS);
+            gpio_set_level(gpio_bl, 0);
+            vTaskDelay(800 / portTICK_PERIOD_MS);
+            duty = 0;
+        } else {
+            fill_display(0, 255 , 0);
+            gpio_set_level(gpio_bl, duty >= 10);
+
+            duty = (duty + 1) % 20;
+            vTaskDelay(50 / portTICK_PERIOD_MS);
+        }
+    }
+    bool c = true;
+}
+
 void oled_capture(uint8_t *out) {
     if (!display_on) return;
     xSemaphoreTake(display_mtx, portMAX_DELAY);
@@ -269,6 +383,9 @@ void display_task(void *params) {
             u8g2_SetPowerSave(&u8g2, 0);
             display_on = true;
             work_64x32();
+            break;
+        case 4:  // minimal mode st7789 atoms3
+            work_atoms3();
             break;
     }
 }
