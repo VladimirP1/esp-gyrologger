@@ -13,6 +13,7 @@ extern "C" {
 #include <esp_log.h>
 #include <esp_check.h>
 #include <nvs_flash.h>
+#include <esp_timer.h>
 #include <nvs.h>
 }
 
@@ -33,7 +34,18 @@ struct raw_sample {
 
 struct sample {
     uint32_t duration_ns;
-    std::variant<raw_sample, quat::quat> sample;
+
+    // this is a dirty hack. it works because both types are almost POD
+    // this was done as a quick fix because std::variant does not play nicely with IRAM
+    struct {
+        quat::quat &quat() { return *reinterpret_cast<quat::quat *>(buf); }
+        quat::quat const &quat() const { return *reinterpret_cast<quat::quat const *>(buf); }
+        raw_sample &raw() { return *reinterpret_cast<raw_sample *>(buf); }
+        raw_sample const &raw() const { return *reinterpret_cast<raw_sample const *>(buf); }
+        alignas(alignof(raw_sample) > alignof(quat::quat) ? alignof(raw_sample)
+                                                          : alignof(quat::quat)) uint8_t
+            buf[sizeof(raw_sample) > sizeof(quat::quat) ? sizeof(raw_sample) : sizeof(quat::quat)];
+    } smpl;
 };
 
 struct acc_sample {
@@ -95,7 +107,7 @@ class Calibrator {
         }
     }
     void ProcessSample(sample &s) {
-        auto &rs = std::get<raw_sample>(s.sample);
+        auto &rs = s.smpl.raw();
         RunGyroCalibration(s);
         RunAccelCalibration(s);
 
@@ -136,7 +148,7 @@ class Calibrator {
             ESP_LOGI(kLogTag, "Gyro calibration complete %d %d %d", g_ofs_x, g_ofs_y, g_ofs_z);
             StoreCalibration();
         } else if (gyr_samples) {
-            auto &rs = std::get<raw_sample>(s.sample);
+            auto &rs = s.smpl.raw();
             sum_gx += rs.gx;
             sum_gy += rs.gy;
             sum_gz += rs.gz;
@@ -148,7 +160,7 @@ class Calibrator {
         static int64_t prev_accel_export_time = esp_timer_get_time();
         if (esp_timer_get_time() - prev_accel_export_time > 50000) {
             prev_accel_export_time = esp_timer_get_time();
-            auto &rs = std::get<raw_sample>(s.sample);
+            auto &rs = s.smpl.raw();
             quat::base_type ascale{kAccelToG / 16.0};
             quat::vec accel = quat::vec{ascale * rs.ax, ascale * rs.ay, ascale * rs.az};
             static constexpr double lpf_k = 0.1;
@@ -161,9 +173,15 @@ class Calibrator {
                                                    (1 - lpf_k) * gctx.logger_control.accel_raw[2];
 
                 static constexpr double gyr_lpf_k = 0.2;
-                gctx.logger_control.gyro_raw[0] = gyr_lpf_k * static_cast<double>(rs.gx) * kGyroToRads + (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[0];
-                gctx.logger_control.gyro_raw[1] = gyr_lpf_k * static_cast<double>(rs.gy) * kGyroToRads + (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[1];
-                gctx.logger_control.gyro_raw[2] = gyr_lpf_k * static_cast<double>(rs.gz) * kGyroToRads + (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[2];
+                gctx.logger_control.gyro_raw[0] =
+                    gyr_lpf_k * static_cast<double>(rs.gx) * kGyroToRads +
+                    (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[0];
+                gctx.logger_control.gyro_raw[1] =
+                    gyr_lpf_k * static_cast<double>(rs.gy) * kGyroToRads +
+                    (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[1];
+                gctx.logger_control.gyro_raw[2] =
+                    gyr_lpf_k * static_cast<double>(rs.gz) * kGyroToRads +
+                    (1 - gyr_lpf_k) * gctx.logger_control.gyro_raw[2];
                 xSemaphoreGive(gctx.logger_control.accel_raw_mtx);
             }
         }
@@ -221,7 +239,7 @@ class GyroRing {
         s.duration_ns = dur_smoother.Smooth(dur_ns);
         raw_sample rs = {
             .gx = gx, .gy = gy, .gz = gz, .ax = ax, .ay = ay, .az = az, .flags = flags};
-        s.sample = rs;
+        s.smpl.raw() = rs;
 
         shadow_wptr = (shadow_wptr + 1) % ring_.size();
 
@@ -248,7 +266,7 @@ class GyroRing {
         // Integrate gyro and LPF
         while (rptr_ != cached_wptr) {
             auto &s = ring_[rptr_];
-            auto &rs = std::get<raw_sample>(s.sample);
+            auto &rs = s.smpl.raw();
 
             calib_.ProcessSample(s);
 
@@ -310,9 +328,9 @@ class GyroRing {
                 if (++accel_cnt % accel_div == 0) {
                     const int scale = 256 * 32768 / 16;
                     acc_ring_[acc_wptr_].gyro_ref = rptr_;
-                    acc_ring_[acc_wptr_].acc[0]= (int16_t)(-((float)f_accel.x) * scale);
-                    acc_ring_[acc_wptr_].acc[1]= (int16_t)(-((float)f_accel.y) * scale);
-                    acc_ring_[acc_wptr_].acc[2]= (int16_t)(-((float)f_accel.z) * scale);
+                    acc_ring_[acc_wptr_].acc[0] = (int16_t)(-((float)f_accel.x) * scale);
+                    acc_ring_[acc_wptr_].acc[1] = (int16_t)(-((float)f_accel.y) * scale);
+                    acc_ring_[acc_wptr_].acc[2] = (int16_t)(-((float)f_accel.z) * scale);
                     acc_wptr_ = (acc_wptr_ + 1) % acc_ring_.size();
                     // printf("%f %f %f %d %d\n", ((float)f_accel.x) * 256, ((float)f_accel.y) *
                     // 256,
@@ -325,7 +343,7 @@ class GyroRing {
 
             MaybeNormalize(quat_rptr_);
 
-            s.sample = quat_rptr_;
+            s.smpl.quat() = quat_rptr_;
 
             rptr_ = (rptr_ + 1) % ring_.size();
         }
@@ -384,8 +402,7 @@ class GyroRing {
                 quat::base_type k2 = quat::base_type{static_cast<float>(interp_ts_ - sptr_ts_) /
                                                      ring_[next_sptr].duration_ns},
                                 k1 = quat::base_type{1} - k2;
-                quat::quat q = std::get<quat::quat>(ring_[sptr_].sample) * k1 +
-                               std::get<quat::quat>(ring_[next_sptr].sample) * k2;
+                quat::quat q = ring_[sptr_].smpl.quat() * k1 + ring_[next_sptr].smpl.quat() * k2;
 
                 int cached_sptr = (sptr_ + 1) % ring_.size();
                 int cached_sptr_ts = sptr_ts_ + ring_[cached_sptr].duration_ns;
@@ -406,9 +423,7 @@ class GyroRing {
         return {.quats = nullptr};
     }
 
-    uint32_t GetInterval() {
-        return desired_interval_;
-    }
+    uint32_t GetInterval() { return desired_interval_; }
 
    private:
     void MaybeNormalize(quat::quat &q) {

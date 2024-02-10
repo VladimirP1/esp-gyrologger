@@ -10,6 +10,7 @@ extern "C" {
 #include <driver/sigmadelta.h>
 
 #include <driver/rmt.h>
+#include <esp_timer.h>
 #include "led_strip/led_strip.h"
 
 #include <freertos/task.h>
@@ -30,7 +31,7 @@ void led_task(void* params) {
         .channel = SIGMADELTA_CHANNEL_0,
         .sigmadelta_duty = -128,
         .sigmadelta_prescale = 80,
-        .sigmadelta_gpio = static_cast<uint8_t>(led_gpio),
+        .sigmadelta_gpio = led_gpio,
     };
     sigmadelta_config(&sigmadelta_cfg);
     gpio_set_drive_capability(led_gpio, GPIO_DRIVE_CAP_0);

@@ -66,7 +66,7 @@ static const char *TAG = "gyro_mpu";
 
 #define REG_WHO_AM_I 0x75
 
-enum {IMU_MPU6000, IMU_MPU6886};
+enum { IMU_MPU6000, IMU_MPU6886 };
 static int fifo_sample_size{};
 static int mpu_imu_type{};
 
@@ -80,9 +80,9 @@ static void IRAM_ATTR gyro_i2c_cb_mpu(void *arg) {
     static uint8_t tmp_data[14];
     static uint64_t prev_time = 0;
     uint64_t time = esp_timer_get_time();
-    if (mini_i2c_read_reg_get_result(tmp_data, fifo_sample_size) == ESP_OK) {
-        int16_t gyr[3];
-        int16_t acc[3];
+    if (mini_i2c_read_reg_get_result(gctx.i2cctx, tmp_data, fifo_sample_size) == ESP_OK) {
+        int16_t gyr[3] = {};
+        int16_t acc[3] = {};
         if (mpu_imu_type == IMU_MPU6000) {
             gyr[0] = (int16_t)((tmp_data[6] << 8) | tmp_data[7]);
             gyr[1] = (int16_t)((tmp_data[8] << 8) | tmp_data[9]);
@@ -102,12 +102,12 @@ static void IRAM_ATTR gyro_i2c_cb_mpu(void *arg) {
                              acc[2], kFlagHaveAccel);
         prev_time = time;
     } else {
-        mini_i2c_hw_fsm_reset();
+        mini_i2c_hw_fsm_reset(gctx.i2cctx);
     }
 
     proc_aux_i2c();
-    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
-                               nullptr);
+    mini_i2c_read_reg_callback(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2,
+                               gyro_i2c_fifo_bytes_cb, nullptr);
 }
 
 static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
@@ -117,7 +117,7 @@ static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
 
     int fifo_bytes = 0;
     uint8_t tmp_data[2];
-    if (mini_i2c_read_reg_get_result(tmp_data, 2) == ESP_OK) {
+    if (mini_i2c_read_reg_get_result(gctx.i2cctx, tmp_data, 2) == ESP_OK) {
         fifo_bytes = tmp_data[1] | (tmp_data[0] << 8);
 
         if (fifo_bytes > 900) {
@@ -125,21 +125,21 @@ static void IRAM_ATTR gyro_i2c_fifo_bytes_cb(void *arg) {
                 ;
         }
     } else {
-        mini_i2c_hw_fsm_reset();
+        mini_i2c_hw_fsm_reset(gctx.i2cctx);
     }
 
     if (fifo_bytes >= fifo_sample_size) {
-        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_RW, fifo_sample_size,
+        mini_i2c_read_reg_callback(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_RW, fifo_sample_size,
                                    gyro_i2c_cb_mpu, NULL);
     } else {
-        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
-                                   nullptr);
+        mini_i2c_read_reg_callback(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2,
+                                   gyro_i2c_fifo_bytes_cb, nullptr);
     }
 }
 
 bool probe_mpu6050(uint8_t dev_adr) {
     uint8_t data[1];
-    if (mini_i2c_read_reg_sync(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
+    if (mini_i2c_read_reg_sync(gctx.i2cctx, dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
         return false;
     }
     return data[0] == 0x68 || data[0] == 0x19;
@@ -147,15 +147,15 @@ bool probe_mpu6050(uint8_t dev_adr) {
 
 void gyro_mpu6050_task(void *params_pvoid) {
     /* This is needed for 2k sample rate */
-    mini_i2c_set_timing(500000);
+    mini_i2c_set_timing(gctx.i2cctx, 500000);
 
     /* Mpu6050 needs larger delays between transfers */
-    mini_i2c_double_stop_timing();
-    mini_i2c_double_stop_timing();
+    mini_i2c_double_stop_timing(gctx.i2cctx);
+    mini_i2c_double_stop_timing(gctx.i2cctx);
 
     /* Detect imu type */
     uint8_t data[1];
-    mini_i2c_read_reg_sync(gctx.gyro_i2c_adr, REG_WHO_AM_I, data, 1);
+    mini_i2c_read_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_WHO_AM_I, data, 1);
     if (data[0] == 0x68) {
         ESP_LOGI(TAG, "IMU is MPU6000");
         mpu_imu_type = IMU_MPU6000;
@@ -174,43 +174,43 @@ void gyro_mpu6050_task(void *params_pvoid) {
     }
 
     /* Reset */
-    ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, REG_PWR_MGMT_1_MASK_RESET));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_PWR_MGMT_1,
+                                            REG_PWR_MGMT_1_MASK_RESET));
     ESP_LOGI(TAG, "IMU reset");
     vTaskDelay(100 / portTICK_PERIOD_MS);
 
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1, 0));
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_PWR_MGMT_1, 0));
     ESP_LOGI(TAG, "IMU wake up");
 
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_PWR_MGMT_1,
+        mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_PWR_MGMT_1,
                                 REG_PWR_MGMT_1_VALUE_CLKSEL_ZGYRO << REG_PWR_MGMT_1_BIT_CLKSEL_0));
     ESP_LOGI(TAG, "IMU change clock");
 
     if (mpu_imu_type == IMU_MPU6000) {
-        ESP_ERROR_CHECK(
-            mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CONFIG, 0 << REG_CONFIG_BIT_DLPF_CFG_0));
-        ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_SMPRT_DIV, 3));
+        ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CONFIG,
+                                                0 << REG_CONFIG_BIT_DLPF_CFG_0));
+        ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_SMPRT_DIV, 3));
     } else if (mpu_imu_type == IMU_MPU6886) {
-        ESP_ERROR_CHECK(
-            mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CONFIG, 1 << REG_CONFIG_BIT_DLPF_CFG_0));
-        ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_SMPRT_DIV, 0));
+        ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CONFIG,
+                                                1 << REG_CONFIG_BIT_DLPF_CFG_0));
+        ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_SMPRT_DIV, 0));
     }
 
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_GYRO_CONFIG,
+        mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_GYRO_CONFIG,
                                 REG_GYRO_CONFIG_VALUE_FS_1000_DPS << REG_GYRO_CONFIG_BIT_FS_SEL_0));
     ESP_ERROR_CHECK(
-        mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_ACCEL_CONFIG,
+        mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_ACCEL_CONFIG,
                                 REG_ACCEL_CONFIG_VALUE_FS_16_G << REG_ACCEL_CONFIG_BIT_FS_SEL_0));
 
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_EN,
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_EN,
                                             REG_FIFO_EN_MASK_ACCEL | REG_FIFO_EN_MASK_GYRO));
-    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_USER_CONTROL,
+    ESP_ERROR_CHECK(mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_USER_CONTROL,
                                             REG_USER_CONTROL_MASK_FIFO_EN));
 
-    mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2, gyro_i2c_fifo_bytes_cb,
-                               nullptr);
+    mini_i2c_read_reg_callback(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_COUNT_H, 2,
+                               gyro_i2c_fifo_bytes_cb, nullptr);
 
     vTaskDelete(NULL);
 }

@@ -93,7 +93,7 @@ static void IRAM_ATTR gyro_i2c_cb(void* arg) {
         16777216 * (70e-3 * 3.141592 / 180.0) / (1.0 / 32.8 * 3.141592 / 180.0);
     static constexpr int64_t kAccelPrescale = 16777216 * 0.488e-3 / (16.0 / 32767);
 
-    if (mini_i2c_read_reg_get_result(tmp_data, bytes_to_read) == ESP_OK) {
+    if (mini_i2c_read_reg_get_result(gctx.i2cctx, tmp_data, bytes_to_read) == ESP_OK) {
         if (bytes_to_read == 2) {
             fifo_bytes = tmp_data[0] | ((tmp_data[1] & 0x03) << 8);
 
@@ -134,54 +134,55 @@ static void IRAM_ATTR gyro_i2c_cb(void* arg) {
             }
         }
     } else {
-        mini_i2c_hw_fsm_reset();
+        mini_i2c_hw_fsm_reset(gctx.i2cctx);
     }
     if (bytes_to_read == 2) {
         proc_aux_i2c();
-        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2,
-                                                   gyro_i2c_cb, nullptr));
+        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_STATUS1,
+                                                   2, gyro_i2c_cb, nullptr));
     } else {
-        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_DATA_OUT_TAG, 7,
-                                                   gyro_i2c_cb, nullptr));
+        ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.i2cctx, gctx.gyro_i2c_adr,
+                                                   REG_FIFO_DATA_OUT_TAG, 7, gyro_i2c_cb, nullptr));
     }
 }
 
 bool probe_lsm6(uint8_t dev_adr) {
     static uint8_t data[1];
-    if (mini_i2c_read_reg_sync(dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
+    if (mini_i2c_read_reg_sync(gctx.i2cctx, dev_adr, REG_WHO_AM_I, data, 1) != ESP_OK) {
         return false;
     }
     return data[0] == 0x6b;
 }
 
 void gyro_lsm6_task(void* params) {
+    ESP_LOGI(TAG, "LSM6DSR detected");
     gctx.gyro_sr = 3333.3;
     gctx.accel_sr = 208.0;
 
-    mini_i2c_set_timing(600000);
-    mini_i2c_double_stop_timing();
-    mini_i2c_double_stop_timing();
+    mini_i2c_set_timing(gctx.i2cctx, 600000);
+    mini_i2c_double_stop_timing(gctx.i2cctx);
+    mini_i2c_double_stop_timing(gctx.i2cctx);
 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_SW_RESET));
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CTRL3_C,
+                            (3 << REG_CTRL3_C_BIT_SW_RESET));
 
     vTaskDelay(5);
 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL9_XL, (3 << REG_CTRL9_XL_BIT_I3C_DISABLE));
-
-   
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CTRL9_XL,
+                            (3 << REG_CTRL9_XL_BIT_I3C_DISABLE));
 
     // clang-format off
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 208 hz / 16g
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (3 << REG_CTRL2_G_BIT_FS0_G)); // 3.33 k / 2000dps
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G)); 
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_CTRL6_C, (2 << REG_CTRL6_C_BIT_FTYPE_0)); // LPF1 cutoff 153hz
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0)); // 3.33 k BDR
-    mini_i2c_write_reg_sync(gctx.gyro_i2c_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CTRL1_XL, (5 << REG_CTRL1_XL_BIT_ODR_XL_0) | (1 << REG_CTRL1_XL_BIT_FS0_XL)); // 208 hz / 16g
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CTRL2_G, (9 << REG_CTRL2_G_BIT_ODR_G0) | (3 << REG_CTRL2_G_BIT_FS0_G)); // 3.33 k / 2000dps
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CTRL3_C, (3 << REG_CTRL3_C_BIT_BDU) | (3 << REG_CTRL3_C_BIT_IF_INC));
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CTRL4_C, (1 << REG_CTRL4_C_BIT_LPF1_SEL_G)); 
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_CTRL6_C, (2 << REG_CTRL6_C_BIT_FTYPE_0)); // LPF1 cutoff 153hz
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_CTRL3, (9 << REG_FIFO_CTRL3_BIT_BDR_GY_0) | (5 << REG_FIFO_CTRL3_BIT_BDR_XL_0)); // 3.33 k BDR
+    mini_i2c_write_reg_sync(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_CTRL4, (1 << REG_FIFO_CTRL4_BIT_FIFO_MODE_0));
     // clang-format on
 
-    ESP_ERROR_CHECK(
-        mini_i2c_read_reg_callback(gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2, gyro_i2c_cb, nullptr));
+    ESP_ERROR_CHECK(mini_i2c_read_reg_callback(gctx.i2cctx, gctx.gyro_i2c_adr, REG_FIFO_STATUS1, 2,
+                                               gyro_i2c_cb, nullptr));
 
     vTaskDelete(NULL);
 }

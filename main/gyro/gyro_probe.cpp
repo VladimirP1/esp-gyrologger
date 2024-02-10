@@ -25,7 +25,7 @@ void gyro_probe_and_start_task() {
         {0x68, probe_icm42688, gyro_icm42688_task}, {0x69, probe_icm42688, gyro_icm42688_task}};
 
     for (auto& entry : probe_list) {
-        mini_i2c_hw_fsm_reset();
+        mini_i2c_hw_fsm_reset(gctx.i2cctx);
         for (int i = 0; i < 3; ++i) {
             ESP_LOGI("gyro-prober", "Probing %02X", entry.i2c_addr);
             if (entry.probe_ptr(entry.i2c_addr)) {

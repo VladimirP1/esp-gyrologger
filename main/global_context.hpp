@@ -33,6 +33,7 @@ typedef struct {
     GyroRing* gyro_ring;
     SettingsManager* settings_manager;
 
+    struct i2c_ctx *i2cctx;
     uint8_t gyro_i2c_adr;
     double gyro_sr;
     double accel_sr;

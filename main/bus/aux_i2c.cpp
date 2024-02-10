@@ -10,7 +10,7 @@ extern "C" {
 void IRAM_ATTR proc_aux_i2c() {
     aux_i2c_msg_t msg;
     if (xQueueReceiveFromISR(gctx.aux_i2c_queue, &msg, nullptr)) {
-        mini_i2c_write_n_sync((uint8_t*)msg.buf, msg.len);
+        mini_i2c_write_n_sync(gctx.i2cctx, (uint8_t*)msg.buf, msg.len);
     }
 }
 

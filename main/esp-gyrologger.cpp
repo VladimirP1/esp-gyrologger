@@ -53,9 +53,12 @@ void test_task(void *params) {
     }
 }
 
+static struct i2c_ctx i2cctx;
+
 void app_main_cpp(void) {
     nvs_init();
 
+    gctx.i2cctx = &i2cctx;
     gctx.settings_manager = new SettingsManager();
 
 #if EXPERIMENTAL_BATTERY
@@ -77,8 +80,8 @@ void app_main_cpp(void) {
     int sda_pin = gctx.settings_manager->Get("sda_pin");
     int scl_pin = gctx.settings_manager->Get("scl_pin");
     if (sda_pin >= 0 && scl_pin >= 0) {
-        ESP_ERROR_CHECK(mini_i2c_init(gctx.settings_manager->Get("sda_pin"),
-                                      gctx.settings_manager->Get("scl_pin"), 400000));
+        ESP_ERROR_CHECK(mini_i2c_init(gctx.i2cctx, gctx.settings_manager->Get("sda_pin"),
+                                      gctx.settings_manager->Get("scl_pin"), 400000, 0));
         gctx.aux_i2c_queue = xQueueCreate(1, sizeof(aux_i2c_msg_t));
         gyro_probe_and_start_task();
     } else {
